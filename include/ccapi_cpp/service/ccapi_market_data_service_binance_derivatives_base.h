@@ -46,10 +46,7 @@ class MarketDataServiceBinanceDerivativesBase : public MarketDataServiceBinanceB
   }
   void extractInstrumentInfo(Element& element, const rj::Value& x) {
     element.insert(CCAPI_INSTRUMENT, x["symbol"].GetString());
-    element.insert(CCAPI_INSTRUMENT_STATUS, x["status"].GetString());
     element.insert(CCAPI_BASE_ASSET, x["baseAsset"].GetString());
-    element.insert(CCAPI_QUOTE_ASSET, x["quoteAsset"].GetString());
-    element.insert(CCAPI_INSTRUMENT, x["symbol"].GetString());
     element.insert(CCAPI_MARGIN_ASSET, x["marginAsset"].GetString());
     element.insert(CCAPI_UNDERLYING_SYMBOL, x["pair"].GetString());
     for (const auto& y : x["filters"].GetArray()) {

@@ -27,6 +27,9 @@
 #include "ccapi_cpp/ccapi_event.h"
 #include "ccapi_cpp/ccapi_macro.h"
 #include "ccapi_cpp/ccapi_market_data_message.h"
+#ifdef TRACEPOINTS
+#include "ccapi_cpp/timer.h"
+#endif
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
@@ -177,6 +180,9 @@ class Service : public std::enable_shared_from_this<Service> {
     throw std::runtime_error(errorMessage);
   }
   virtual void subscribe(std::vector<Subscription>& subscriptionList) {}
+#ifdef TRACEPOINTS
+  void set_timer_reference(emumba::utils::timer* timer) { _mytimer = timer; }
+#endif
   virtual void convertRequestForRest(http::request<http::string_body>& req, const Request& request, const TimePoint& now, const std::string& symbolId,
                                      const std::map<std::string, std::string>& credential) {}
   virtual void processSuccessfulTextMessageRest(int statusCode, const Request& request, const std::string& textMessage, const TimePoint& timeReceived,
@@ -1121,6 +1127,9 @@ class Service : public std::enable_shared_from_this<Service> {
     auto opcode = msg->get_opcode();
     // CCAPI_LOGGER_DEBUG("opcode = " + toString(opcode));
     if (msg->get_opcode() == websocketpp::frame::opcode::text) {
+#ifdef TRACEPOINTS
+      _mytimer->start();
+#endif
       const std::string& textMessage = msg->get_payload();
       CCAPI_LOGGER_DEBUG("received a text message: " + textMessage);
       try {
@@ -1801,6 +1810,9 @@ class Service : public std::enable_shared_from_this<Service> {
     return std::to_string(std::stoll(input.substr(0, dotPosition)) * 1000 + std::stoll(UtilString::rightPadTo(input.substr(dotPosition + 1, 3), 3, '0')));
   }
   virtual void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view textMessage, const TimePoint& timeReceived) {}
+#ifdef TRACEPOINTS
+  emumba::utils::timer* _mytimer;
+#endif
 #endif
   bool hostHttpHeaderValueIgnorePort{};
   std::string apiKeyName;
