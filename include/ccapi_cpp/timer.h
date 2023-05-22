@@ -3,7 +3,7 @@
 
 #include <sys/time.h>
 #include <time.h>
-namespace rakurai_logger {
+namespace rakurai {
 namespace utils {
 class timer {
  private:
@@ -21,6 +21,6 @@ class timer {
 };
 
 }  // namespace utils
-}  // namespace rakurai_logger
+}  // namespace rakurai
 
 #endif
