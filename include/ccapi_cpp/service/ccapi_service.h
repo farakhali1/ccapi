@@ -181,7 +181,7 @@ class Service : public std::enable_shared_from_this<Service> {
   }
   virtual void subscribe(std::vector<Subscription>& subscriptionList) {}
 #ifdef TRACEPOINTS
-  void set_timer_reference(emumba::utils::timer* timer) { _mytimer = timer; }
+  void set_timer_reference(rakurai::utils::timer* timer) { _mytimer = timer; }
 #endif
   virtual void convertRequestForRest(http::request<http::string_body>& req, const Request& request, const TimePoint& now, const std::string& symbolId,
                                      const std::map<std::string, std::string>& credential) {}
@@ -1811,7 +1811,7 @@ class Service : public std::enable_shared_from_this<Service> {
   }
   virtual void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view textMessage, const TimePoint& timeReceived) {}
 #ifdef TRACEPOINTS
-  emumba::utils::timer* _mytimer;
+  rakurai::utils::timer* _mytimer;
 #endif
 #endif
   bool hostHttpHeaderValueIgnorePort{};
