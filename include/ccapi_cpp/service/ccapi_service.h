@@ -1720,9 +1720,9 @@ class Service : public std::enable_shared_from_this<Service> {
     CCAPI_LOGGER_FUNCTION_EXIT;
   }
   virtual void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view textMessage, const TimePoint& timeReceived) {}
+#endif
 #ifdef TRACEPOINTS
   rakurai::utils::timer* _mytimer;
-#endif
 #endif
   bool hostHttpHeaderValueIgnorePort{};
   std::string apiKeyName;
