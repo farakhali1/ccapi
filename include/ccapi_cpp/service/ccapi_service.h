@@ -1810,9 +1810,9 @@ class Service : public std::enable_shared_from_this<Service> {
     return std::to_string(std::stoll(input.substr(0, dotPosition)) * 1000 + std::stoll(UtilString::rightPadTo(input.substr(dotPosition + 1, 3), 3, '0')));
   }
   virtual void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view textMessage, const TimePoint& timeReceived) {}
+#endif
 #ifdef TRACEPOINTS
   rakurai::utils::timer* _mytimer;
-#endif
 #endif
   bool hostHttpHeaderValueIgnorePort{};
   std::string apiKeyName;
