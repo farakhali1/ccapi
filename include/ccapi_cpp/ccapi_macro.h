@@ -431,6 +431,9 @@
 #ifndef CCAPI_EM_ORDER_SIDE
 #define CCAPI_EM_ORDER_SIDE "SIDE"
 #endif
+#ifndef EXCHANGE_UPDATE_TIME
+#define EXCHANGE_UPDATE_TIME "Exchange_Update_Time"
+#endif
 #ifndef CCAPI_EM_ORDER_SIDE_BUY
 #define CCAPI_EM_ORDER_SIDE_BUY "BUY"
 #endif
@@ -669,7 +672,7 @@
 #define CCAPI_BINANCE_USDS_FUTURES_LISTEN_KEY_PATH "/fapi/v1/listenKey"
 #endif
 #ifndef CCAPI_BINANCE_COIN_FUTURES_URL_REST_BASE
-#define CCAPI_BINANCE_COIN_FUTURES_URL_REST_BASE "https://dapi.binance.com"
+#define CCAPI_BINANCE_COIN_FUTURES_URL_REST_BASE "https://testnet.binancefuture.com"
 #endif
 #ifndef CCAPI_BINANCE_COIN_FUTURES_CREATE_ORDER_PATH
 #define CCAPI_BINANCE_COIN_FUTURES_CREATE_ORDER_PATH "/dapi/v1/order"
