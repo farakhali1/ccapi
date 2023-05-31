@@ -933,7 +933,7 @@ class Session {
     }
   }
 #endif
-#ifdef TRACEPOINTS
+#if defined TRACEPOINTS || defined ORDER_ENTRY_TRACEPOINTS
   void set_timer_reference(rakurai::utils::timer* timer, std::string market_side, std::string exchnage_name) {
     std::map<std::string, std::shared_ptr<Service> >& serviceByExchangeMap = this->serviceByServiceNameExchangeMap.at(market_side);
     serviceByExchangeMap.at(exchnage_name)->set_timer_reference(timer);
