@@ -27,7 +27,7 @@
 #include "ccapi_cpp/ccapi_event.h"
 #include "ccapi_cpp/ccapi_macro.h"
 #include "ccapi_cpp/ccapi_market_data_message.h"
-#ifdef TRACEPOINTS
+#if defined TRACEPOINTS || defined ORDER_ENTRY_TRACEPOINTS
 #include "ccapi_cpp/timer.h"
 #endif
 #include "rapidjson/document.h"
@@ -180,7 +180,7 @@ class Service : public std::enable_shared_from_this<Service> {
     throw std::runtime_error(errorMessage);
   }
   virtual void subscribe(std::vector<Subscription>& subscriptionList) {}
-#ifdef TRACEPOINTS
+#if defined TRACEPOINTS || defined ORDER_ENTRY_TRACEPOINTS
   void set_timer_reference(rakurai::utils::timer* timer) { _mytimer = timer; }
 #endif
   virtual void convertRequestForRest(http::request<http::string_body>& req, const Request& request, const TimePoint& now, const std::string& symbolId,
@@ -1811,7 +1811,7 @@ class Service : public std::enable_shared_from_this<Service> {
   }
   virtual void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view textMessage, const TimePoint& timeReceived) {}
 #endif
-#ifdef TRACEPOINTS
+#if defined TRACEPOINTS || defined ORDER_ENTRY_TRACEPOINTS
   rakurai::utils::timer* _mytimer;
 #endif
   bool hostHttpHeaderValueIgnorePort{};
