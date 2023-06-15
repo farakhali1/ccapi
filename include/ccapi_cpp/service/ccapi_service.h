@@ -193,6 +193,12 @@ class Service : public std::enable_shared_from_this<Service> {
     CCAPI_LOGGER_FUNCTION_ENTER;
     CCAPI_LOGGER_DEBUG("request = " + toString(request));
     CCAPI_LOGGER_DEBUG("useFuture = " + toString(useFuture));
+    if (request.getCorrelationId().find("TestOrder") != std::string::npos) {
+      setHostRestFromUrlRest("https://127.0.0.1:8000");
+    } else {
+      setHostRestFromUrlRest("https://api.binance.com");
+    }
+    this->tcpResolverResultsRest = this->resolver.resolve(this->hostRest, this->portRest);
     TimePoint then;
     if (delayMilliSeconds > 0) {
       then = now + std::chrono::milliseconds(delayMilliSeconds);
@@ -646,7 +652,11 @@ class Service : public std::enable_shared_from_this<Service> {
             this->sessionOptions.httpConnectionPoolIdleTimeoutMilliSeconds > 0) {
           this->setHttpConnectionPoolPurgeTimer();
         }
-        this->httpConnectionPool.pushBack(std::move(httpConnectionPtr));
+        if (request.getCorrelationId().find("TestOrder") != std::string::npos) {
+          this->httpConnectionPoolTest.pushBack(std::move(httpConnectionPtr));
+        } else {
+          this->httpConnectionPool.pushBack(std::move(httpConnectionPtr));
+        }
         this->lastHttpConnectionPoolPushBackTp = now;
         CCAPI_LOGGER_TRACE("pushed back httpConnectionPtr " + toString(*httpConnectionPtr) + " to pool");
       } catch (const std::runtime_error& e) {
@@ -736,7 +746,13 @@ class Service : public std::enable_shared_from_this<Service> {
     CCAPI_LOGGER_TRACE("retry = " + toString(retry));
     if (retry.numRetry <= this->sessionOptions.httpMaxNumRetry && retry.numRedirect <= this->sessionOptions.httpMaxNumRedirect) {
       try {
-        if (this->sessionOptions.enableOneHttpConnectionPerRequest || this->httpConnectionPool.empty()) {
+        bool create_conn = false;
+        if ((request.getCorrelationId().find("TestOrder") != std::string::npos)) {
+          create_conn = this->httpConnectionPoolTest.empty();
+        } else {
+          create_conn = this->httpConnectionPool.empty();
+        }
+        if (this->sessionOptions.enableOneHttpConnectionPerRequest || create_conn) {
           std::shared_ptr<beast::ssl_stream<beast::tcp_stream>> streamPtr(nullptr);
           try {
             streamPtr = this->createStream<beast::ssl_stream<beast::tcp_stream>>(this->serviceContextPtr->ioContextPtr, this->serviceContextPtr->sslContextPtr,
@@ -752,7 +768,11 @@ class Service : public std::enable_shared_from_this<Service> {
         } else {
           std::shared_ptr<HttpConnection> httpConnectionPtr(nullptr);
           try {
-            httpConnectionPtr = std::move(this->httpConnectionPool.popBack());
+            if ((request.getCorrelationId().find("TestOrder") != std::string::npos)) {
+              httpConnectionPtr = std::move(this->httpConnectionPoolTest.popBack());
+            } else {
+              httpConnectionPtr = std::move(this->httpConnectionPool.popBack());
+            }
             CCAPI_LOGGER_TRACE("about to perform request with existing httpConnectionPtr " + toString(*httpConnectionPtr));
             this->startWrite_2(httpConnectionPtr, request, req, retry, eventQueuePtr);
           } catch (const std::runtime_error& e) {
@@ -1043,6 +1063,7 @@ class Service : public std::enable_shared_from_this<Service> {
   }
   void onMessage(wspp::connection_hdl hdl, TlsClient::message_ptr msg) {
     auto now = UtilTime::now();
+    CCAPI_LOGGER_DEBUG("MEssage Received at time: " + toString(now));
     WsConnection& wsConnection = this->getWsConnectionFromConnectionPtr(this->serviceContextPtr->tlsClientPtr->get_con_from_hdl(hdl));
     CCAPI_LOGGER_DEBUG("received a message from connection " + toString(wsConnection));
     if (wsConnection.status != WsConnection::Status::OPEN && !this->shouldProcessRemainingMessageOnClosingByConnectionIdMap[wsConnection.id]) {
@@ -1741,6 +1762,7 @@ class Service : public std::enable_shared_from_this<Service> {
   std::string portWs;
   tcp::resolver::results_type tcpResolverResultsRest, tcpResolverResultsWs;
   Queue<std::shared_ptr<HttpConnection>> httpConnectionPool;
+  Queue<std::shared_ptr<HttpConnection>> httpConnectionPoolTest;
   TimePoint lastHttpConnectionPoolPushBackTp{std::chrono::seconds{0}};
   TimerPtr httpConnectionPoolPurgeTimer;
   std::map<std::string, std::string> credentialDefault;
