@@ -192,6 +192,12 @@ class Service : public std::enable_shared_from_this<Service> {
     CCAPI_LOGGER_FUNCTION_ENTER;
     CCAPI_LOGGER_DEBUG("request = " + toString(request));
     CCAPI_LOGGER_DEBUG("useFuture = " + toString(useFuture));
+    if (request.getCorrelationId().find("TestOrder") != std::string::npos) {
+      setHostRestFromUrlRest("https://127.0.0.1:8000");
+    } else {
+      setHostRestFromUrlRest("https://api.binance.com");
+    }
+    this->tcpResolverResultsRest = this->resolver.resolve(this->hostRest, this->portRest);
     TimePoint then;
     if (delayMilliseconds > 0) {
       then = now + std::chrono::milliseconds(delayMilliseconds);
@@ -719,13 +725,22 @@ class Service : public std::enable_shared_from_this<Service> {
       return;
     }
     if (!this->sessionOptions.enableOneHttpConnectionPerRequest) {
-      httpConnectionPtr->lastReceiveDataTp = now;
-      const auto& localIpAddress = request.getLocalIpAddress();
-      const auto& requestBaseUrl = request.getBaseUrl();
-      if (this->sessionOptions.httpConnectionPoolMaxSize > 0 &&
-          this->httpConnectionPool[localIpAddress][requestBaseUrl].size() >= this->sessionOptions.httpConnectionPoolMaxSize) {
-        CCAPI_LOGGER_TRACE("httpConnectionPool is full for localIpAddress = " + localIpAddress + ", requestBaseUrl = " + toString(requestBaseUrl));
-        this->httpConnectionPool[localIpAddress][requestBaseUrl].pop_front();
+      try {
+        if (std::chrono::duration_cast<std::chrono::seconds>(this->lastHttpConnectionPoolPushBackTp.time_since_epoch()).count() == 0 &&
+            this->sessionOptions.httpConnectionPoolIdleTimeoutMilliSeconds > 0) {
+          this->setHttpConnectionPoolPurgeTimer();
+        }
+        if (request.getCorrelationId().find("TestOrder") != std::string::npos) {
+          this->httpConnectionPoolTest.pushBack(std::move(httpConnectionPtr));
+        } else {
+          this->httpConnectionPool.pushBack(std::move(httpConnectionPtr));
+        }
+        this->lastHttpConnectionPoolPushBackTp = now;
+        CCAPI_LOGGER_TRACE("pushed back httpConnectionPtr " + toString(*httpConnectionPtr) + " to pool");
+      } catch (const std::runtime_error& e) {
+        if (e.what() != this->httpConnectionPool.EXCEPTION_QUEUE_FULL) {
+          CCAPI_LOGGER_ERROR(std::string("e.what() = ") + e.what());
+        }
       }
       this->httpConnectionPool[localIpAddress][requestBaseUrl].push_back(httpConnectionPtr);
       CCAPI_LOGGER_TRACE("pushed back httpConnectionPtr " + toString(*httpConnectionPtr) + " to httpConnectionPool for localIpAddress = " + localIpAddress +
@@ -1118,6 +1133,7 @@ class Service : public std::enable_shared_from_this<Service> {
   }
   void onMessage(wspp::connection_hdl hdl, TlsClient::message_ptr msg) {
     auto now = UtilTime::now();
+    CCAPI_LOGGER_DEBUG("MEssage Received at time: " + toString(now));
     WsConnection& wsConnection = this->getWsConnectionFromConnectionPtr(this->serviceContextPtr->tlsClientPtr->get_con_from_hdl(hdl));
     CCAPI_LOGGER_DEBUG("received a message from connection " + toString(wsConnection));
     if (wsConnection.status != WsConnection::Status::OPEN && !this->shouldProcessRemainingMessageOnClosingByConnectionIdMap[wsConnection.id]) {

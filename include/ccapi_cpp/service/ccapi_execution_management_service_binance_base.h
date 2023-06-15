@@ -583,7 +583,7 @@ class ExecutionManagementServiceBinanceBase : public ExecutionManagementService 
       std::string instrument = data["s"].GetString();
       if (instrumentSet.empty() || instrumentSet.find(UtilString::toUpper(instrument)) != instrumentSet.end() ||
           instrumentSet.find(UtilString::toLower(instrument)) != instrumentSet.end()) {
-        if (executionType == "TRADE" && fieldSet.find(CCAPI_EM_PRIVATE_TRADE) != fieldSet.end()) {
+        if (executionType == "NEW" && fieldSet.find(CCAPI_EM_PRIVATE_TRADE) != fieldSet.end()) {
           Message message;
           message.setTimeReceived(timeReceived);
           message.setCorrelationIdList({subscription.getCorrelationId()});
@@ -598,6 +598,7 @@ class ExecutionManagementServiceBinanceBase : public ExecutionManagementService 
           element.insert(CCAPI_IS_MAKER, data["m"].GetBool() ? "1" : "0");
           element.insert(CCAPI_EM_ORDER_ID, std::string(data["i"].GetString()));
           element.insert(CCAPI_EM_CLIENT_ORDER_ID, std::string(data["c"].GetString()));
+          element.insert(EXCHANGE_UPDATE_TIME, std::string(data["O"].GetString()));
           element.insert(CCAPI_EM_ORDER_INSTRUMENT, instrument);
           {
             auto it = data.FindMember("n");
