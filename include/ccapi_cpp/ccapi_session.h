@@ -1,7 +1,9 @@
 #ifndef INCLUDE_CCAPI_CPP_CCAPI_SESSION_H_
 #define INCLUDE_CCAPI_CPP_CCAPI_SESSION_H_
 #include "ccapi_cpp/ccapi_macro.h"
-
+#ifdef ENABLE_EPOLL_HTTPS_CLIENT
+#include "io_handler.h"
+#endif
 // start: enable exchanges for market data
 #ifdef CCAPI_ENABLE_SERVICE_MARKET_DATA
 #ifdef CCAPI_ENABLE_EXCHANGE_COINBASE
@@ -267,7 +269,12 @@ class Session {
         eventDispatcher(eventDispatcher),
 #endif
         eventQueue(sessionOptions.maxEventQueueSize),
-        serviceContextPtr(new ServiceContext()) {
+#ifdef ENABLE_EPOLL_HTTPS_CLIENT
+        serviceContextPtr(new ServiceContext(io))
+#else
+        serviceContextPtr(new ServiceContext())
+#endif
+  {
     CCAPI_LOGGER_FUNCTION_ENTER;
 #ifndef CCAPI_USE_SINGLE_THREAD
     if (this->eventHandler) {
@@ -942,6 +949,9 @@ class Session {
 #ifndef CCAPI_EXPOSE_INTERNAL
 
  protected:
+#endif
+#ifdef ENABLE_EPOLL_HTTPS_CLIENT
+  emumba::connector::io_handler io;
 #endif
   SessionOptions sessionOptions;
   SessionConfigs sessionConfigs;
