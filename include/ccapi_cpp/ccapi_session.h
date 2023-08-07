@@ -270,7 +270,7 @@ class Session {
 #endif
         eventQueue(sessionOptions.maxEventQueueSize),
 #ifdef ENABLE_EPOLL_HTTPS_CLIENT
-        serviceContextPtr(new ServiceContext(io))
+        serviceContextPtr(new ServiceContext(_io_handler))
 #else
         serviceContextPtr(new ServiceContext())
 #endif
@@ -605,6 +605,11 @@ class Session {
       for (const auto& y : x.second) {
         auto exchange = y.first;
         CCAPI_LOGGER_INFO("enabled service: " + serviceName + ", exchange: " + exchange);
+#ifdef ENABLE_EPOLL_HTTPS_CLIENT
+        auto service_Ptr = y.second;
+        service_Ptr->createNewHttpSession(_io_handler);
+        CCAPI_LOGGER_INFO("create new HTTP session for service: " + serviceName + ", exchange: " + exchange);
+#endif
       }
     }
     CCAPI_LOGGER_FUNCTION_EXIT;
@@ -951,7 +956,7 @@ class Session {
  protected:
 #endif
 #ifdef ENABLE_EPOLL_HTTPS_CLIENT
-  emumba::connector::io_handler io;
+  emumba::connector::io_handler _io_handler;
 #endif
   SessionOptions sessionOptions;
   SessionConfigs sessionConfigs;

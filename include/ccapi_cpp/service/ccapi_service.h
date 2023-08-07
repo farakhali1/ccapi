@@ -1,6 +1,10 @@
 #ifndef INCLUDE_CCAPI_CPP_SERVICE_CCAPI_SERVICE_H_
 #define INCLUDE_CCAPI_CPP_SERVICE_CCAPI_SERVICE_H_
 #include "ccapi_cpp/ccapi_logger.h"
+#ifdef ENABLE_EPOLL_HTTPS_CLIENT
+#include "https_client.h"
+#include "io_handler.h"
+#endif
 #ifndef RAPIDJSON_HAS_CXX11_NOEXCEPT
 #define RAPIDJSON_HAS_CXX11_NOEXCEPT 0
 #endif
@@ -181,6 +185,29 @@ class Service : public std::enable_shared_from_this<Service> {
     throw std::runtime_error(errorMessage);
   }
   virtual void subscribe(std::vector<Subscription>& subscriptionList) {}
+#ifdef ENABLE_EPOLL_HTTPS_CLIENT
+  void on_open() { CCAPI_LOGGER_INFO("HTTPS connection established: " + this->exchangeName); }
+  void on_close() { CCAPI_LOGGER_INFO("HTTPS connection failed"); }
+
+  virtual void on_response(const std::string& response, std::function<void(const http::response<http::string_body>&)> responseHandler) {
+    std::cout << "Response received: " << response << std::endl;
+    std::shared_ptr<http::response<http::string_body>> resPtr(new http::response<http::string_body>());
+    resPtr->result(http::status::ok);
+    resPtr->body() = response;
+    responseHandler(*resPtr);
+  }
+
+  void createNewHttpSession(emumba::connector::io_handler& io_) {
+    CCAPI_LOGGER_INFO("Creating New Http Session on uri: " + this->hostRest);
+    https_socket = std::make_shared<emumba::connector::https::client>(io_, io_.get_logger_name());
+    if (https_socket->connect(("https://" + this->hostRest), std::bind(&ccapi::Service::on_open, this), std::bind(&ccapi::Service::on_close, this)) <
+        0)  // returns socket fd
+    {
+      on_close();
+    }
+  }
+#endif
+
 #if defined TRACEPOINTS || defined ORDER_ENTRY_TRACEPOINTS
   void set_timer_reference(rakurai::utils::timer* timer) { _mytimer = timer; }
 #endif
@@ -190,6 +217,37 @@ class Service : public std::enable_shared_from_this<Service> {
                                                 Queue<Event>* eventQueuePtr) {}
   std::shared_ptr<std::future<void>> sendRequest(Request& request, const bool useFuture, const TimePoint& now, long delayMilliSeconds,
                                                  Queue<Event>* eventQueuePtr) {
+#ifdef ENABLE_EPOLL_HTTPS_CLIENT
+    {
+      http::request<http::string_body> req;
+      TimePoint then;
+      if (delayMilliSeconds > 0) {
+        then = now + std::chrono::milliseconds(delayMilliSeconds);
+      } else {
+        then = now;
+      }
+      req = this->convertRequest(request, then);
+
+      // CCAPI_LOGGER_INFO("Req Method: " + req.base().method_string().to_string());
+      // CCAPI_LOGGER_INFO("Req Target: " + req.target().to_string());
+      // CCAPI_LOGGER_INFO("Req Host: " + req.base()["Host"].to_string());
+
+      std::map<std::string, std::string> _header;
+
+      const auto& headers = req.base();
+      for (const auto& header : headers) {
+        CCAPI_LOGGER_INFO("Header Name: " + header.name_string().to_string() + " Value: " + header.value().to_string());
+        _header[header.name_string().to_string()] = header.value().to_string();
+      }
+      std::string req_method = req.base().method_string().to_string();
+      std::string req_target = req.target().to_string();
+      CCAPI_LOGGER_DEBUG("Sending new request Method: " + req_method + " Target: " + req_target);
+      https_socket->send(
+          std::bind(&ccapi::Service::processSuccessfulTextMessageRest, this, 200, request, std::placeholders::_1, UtilTime::now(), eventQueuePtr), req_method,
+          req_target, "", _header);
+      return nullptr;
+    }
+#else
     CCAPI_LOGGER_FUNCTION_ENTER;
     CCAPI_LOGGER_DEBUG("request = " + toString(request));
     CCAPI_LOGGER_DEBUG("useFuture = " + toString(useFuture));
@@ -254,6 +312,7 @@ class Service : public std::enable_shared_from_this<Service> {
     }
     CCAPI_LOGGER_FUNCTION_EXIT;
     return futurePtr;
+#endif
   }
   virtual void sendRequestByWebsocket(Request& request, const TimePoint& now) {}
   virtual void sendRequestByFix(Request& request, const TimePoint& now) {}
@@ -359,6 +418,19 @@ class Service : public std::enable_shared_from_this<Service> {
     oss << req;
     CCAPI_LOGGER_DEBUG("req = \n" + oss.str());
 #endif
+#ifdef ENABLE_EPOLL_HTTPS_CLIENT
+    std::map<std::string, std::string> _header;
+    const auto& headers = req.base();
+    for (const auto& header : headers) {
+      CCAPI_LOGGER_INFO("Header Name: " + header.name_string().to_string() + " Value: " + header.value().to_string());
+      _header[header.name_string().to_string()] = header.value().to_string();
+    }
+    std::string req_method = req.base().method_string().to_string();
+    std::string req_target = req.target().to_string();
+    CCAPI_LOGGER_DEBUG("Sending new request Method: " + req_method + " Target: " + req_target);
+    https_socket->send(std::bind(&ccapi::Service::on_response, this, std::placeholders::_1, responseHandler), req_method, req_target, "", _header);
+    return;
+#else
     std::shared_ptr<beast::ssl_stream<beast::tcp_stream>> streamPtr(nullptr);
     try {
       streamPtr = this->createStream<beast::ssl_stream<beast::tcp_stream>>(this->serviceContextPtr->ioContextPtr, this->serviceContextPtr->sslContextPtr,
@@ -371,6 +443,7 @@ class Service : public std::enable_shared_from_this<Service> {
     std::shared_ptr<HttpConnection> httpConnectionPtr(new HttpConnection(this->hostRest, this->portRest, streamPtr));
     CCAPI_LOGGER_DEBUG("httpConnection = " + toString(*httpConnectionPtr));
     this->startConnect(httpConnectionPtr, req, errorHandler, responseHandler, timeoutMilliSeconds, this->tcpResolverResultsRest);
+#endif
   }
   void sendRequest(const std::string& host, const std::string& port, const http::request<http::string_body>& req,
                    std::function<void(const beast::error_code&)> errorHandler, std::function<void(const http::response<http::string_body>&)> responseHandler,
@@ -1741,6 +1814,9 @@ class Service : public std::enable_shared_from_this<Service> {
     CCAPI_LOGGER_FUNCTION_EXIT;
   }
   virtual void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view textMessage, const TimePoint& timeReceived) {}
+#endif
+#ifdef ENABLE_EPOLL_HTTPS_CLIENT
+  std::shared_ptr<emumba::connector::https::client> https_socket;
 #endif
 #if defined TRACEPOINTS || defined ORDER_ENTRY_TRACEPOINTS
   rakurai::utils::timer* _mytimer;
