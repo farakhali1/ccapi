@@ -186,28 +186,38 @@ class Service : public std::enable_shared_from_this<Service> {
   }
   virtual void subscribe(std::vector<Subscription>& subscriptionList) {}
 #ifdef ENABLE_EPOLL_HTTPS_CLIENT
-  void on_open() { CCAPI_LOGGER_INFO("HTTPS connection established: " + this->exchangeName); }
-  void on_close() { CCAPI_LOGGER_INFO("HTTPS connection failed"); }
-
-  virtual void on_response(const std::string& response, std::function<void(const http::response<http::string_body>&)> responseHandler) {
-    std::cout << "Response received: " << response << std::endl;
+  void prepareOnReadResponse(const std::string& response, http::request<http::string_body> req,
+                             std::function<void(const http::response<http::string_body>&)> responseHandler) {
+    CCAPI_LOGGER_INFO("Response received(OnRead), response: " + response);
+#if defined(CCAPI_ENABLE_LOG_DEBUG) || defined(CCAPI_ENABLE_LOG_TRACE)
+    std::ostringstream oss;
+    oss << req;
+    CCAPI_LOGGER_DEBUG("req = \n" + oss.str());
+#endif
     std::shared_ptr<http::response<http::string_body>> resPtr(new http::response<http::string_body>());
     resPtr->result(http::status::ok);
     resPtr->body() = response;
     responseHandler(*resPtr);
   }
-
+  void prepareOnRead_2Response(const std::string& response, const Request& request, Queue<Event>* eventQueuePtr) {
+    CCAPI_LOGGER_INFO("Response received(OnRead_2), response: " + response);
+#if defined(CCAPI_ENABLE_LOG_DEBUG) || defined(CCAPI_ENABLE_LOG_TRACE)
+    std::ostringstream oss;
+    oss << request;
+    CCAPI_LOGGER_DEBUG("req = \n" + oss.str());
+#endif
+    ccapi::Service::processSuccessfulTextMessageRest(200, request, response, UtilTime::now(), eventQueuePtr);
+  }
+  void onOpen() { CCAPI_LOGGER_INFO("HTTPS connection established successfully for exchange: " + this->exchangeName); }
+  void onClose() { CCAPI_LOGGER_ERROR("HTTPS connection failed for exchange: " + this->exchangeName); }
   void createNewHttpSession(emumba::connector::io_handler& io_) {
-    CCAPI_LOGGER_INFO("Creating New Http Session on uri: " + this->hostRest);
-    https_socket = std::make_shared<emumba::connector::https::client>(io_, io_.get_logger_name());
-    if (https_socket->connect(("https://" + this->hostRest), std::bind(&ccapi::Service::on_open, this), std::bind(&ccapi::Service::on_close, this)) <
-        0)  // returns socket fd
-    {
+    CCAPI_LOGGER_DEBUG("Creating new http session on uri: " + this->hostRest);
+    _https_session = std::make_shared<emumba::connector::https::client>(io_, io_.get_logger_name());
+    if (_https_session->connect(("https://" + this->hostRest), std::bind(&ccapi::Service::onOpen, this), std::bind(&ccapi::Service::onClose, this)) < 0) {
       on_close();
     }
   }
 #endif
-
 #if defined TRACEPOINTS || defined ORDER_ENTRY_TRACEPOINTS
   void set_timer_reference(rakurai::utils::timer* timer) { _mytimer = timer; }
 #endif
@@ -218,35 +228,25 @@ class Service : public std::enable_shared_from_this<Service> {
   std::shared_ptr<std::future<void>> sendRequest(Request& request, const bool useFuture, const TimePoint& now, long delayMilliSeconds,
                                                  Queue<Event>* eventQueuePtr) {
 #ifdef ENABLE_EPOLL_HTTPS_CLIENT
-    {
-      http::request<http::string_body> req;
-      TimePoint then;
-      if (delayMilliSeconds > 0) {
-        then = now + std::chrono::milliseconds(delayMilliSeconds);
-      } else {
-        then = now;
-      }
-      req = this->convertRequest(request, then);
-
-      // CCAPI_LOGGER_INFO("Req Method: " + req.base().method_string().to_string());
-      // CCAPI_LOGGER_INFO("Req Target: " + req.target().to_string());
-      // CCAPI_LOGGER_INFO("Req Host: " + req.base()["Host"].to_string());
-
-      std::map<std::string, std::string> _header;
-
-      const auto& headers = req.base();
-      for (const auto& header : headers) {
-        CCAPI_LOGGER_INFO("Header Name: " + header.name_string().to_string() + " Value: " + header.value().to_string());
-        _header[header.name_string().to_string()] = header.value().to_string();
-      }
-      std::string req_method = req.base().method_string().to_string();
-      std::string req_target = req.target().to_string();
-      CCAPI_LOGGER_DEBUG("Sending new request Method: " + req_method + " Target: " + req_target);
-      https_socket->send(
-          std::bind(&ccapi::Service::processSuccessfulTextMessageRest, this, 200, request, std::placeholders::_1, UtilTime::now(), eventQueuePtr), req_method,
-          req_target, "", _header);
-      return nullptr;
+    http::request<http::string_body> req;
+    TimePoint then;
+    if (delayMilliSeconds > 0) {
+      then = now + std::chrono::milliseconds(delayMilliSeconds);
+    } else {
+      then = now;
     }
+    req = this->convertRequest(request, then);
+    const auto& headers = req.base();
+    for (const auto& header : headers) {
+      CCAPI_LOGGER_DEBUG("Header Name: " + header.name_string().to_string() + " Value: " + header.value().to_string());
+      _header[header.name_string().to_string()] = header.value().to_string();
+    }
+    req_method = req.base().method_string().to_string();
+    req_target = req.target().to_string();
+    CCAPI_LOGGER_DEBUG("Sending new request Method: " + req_method + " Target: " + req_target);
+    _https_session->send(std::bind(&ccapi::Service::prepareOnRead_2Response, this, std::placeholders::_1, request, eventQueuePtr), req_method, req_target, "",
+                         _header);
+    return nullptr;
 #else
     CCAPI_LOGGER_FUNCTION_ENTER;
     CCAPI_LOGGER_DEBUG("request = " + toString(request));
@@ -419,16 +419,16 @@ class Service : public std::enable_shared_from_this<Service> {
     CCAPI_LOGGER_DEBUG("req = \n" + oss.str());
 #endif
 #ifdef ENABLE_EPOLL_HTTPS_CLIENT
-    std::map<std::string, std::string> _header;
     const auto& headers = req.base();
     for (const auto& header : headers) {
-      CCAPI_LOGGER_INFO("Header Name: " + header.name_string().to_string() + " Value: " + header.value().to_string());
+      CCAPI_LOGGER_DEBUG("Header Name: " + header.name_string().to_string() + " Value: " + header.value().to_string());
       _header[header.name_string().to_string()] = header.value().to_string();
     }
-    std::string req_method = req.base().method_string().to_string();
-    std::string req_target = req.target().to_string();
+    req_method = req.base().method_string().to_string();
+    req_target = req.target().to_string();
     CCAPI_LOGGER_DEBUG("Sending new request Method: " + req_method + " Target: " + req_target);
-    https_socket->send(std::bind(&ccapi::Service::on_response, this, std::placeholders::_1, responseHandler), req_method, req_target, "", _header);
+    _https_session->send(std::bind(&ccapi::Service::prepareOnReadResponse, this, std::placeholders::_1, req, responseHandler), req_method, req_target, "",
+                         _header);
     return;
 #else
     std::shared_ptr<beast::ssl_stream<beast::tcp_stream>> streamPtr(nullptr);
@@ -1816,7 +1816,10 @@ class Service : public std::enable_shared_from_this<Service> {
   virtual void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view textMessage, const TimePoint& timeReceived) {}
 #endif
 #ifdef ENABLE_EPOLL_HTTPS_CLIENT
-  std::shared_ptr<emumba::connector::https::client> https_socket;
+  std::shared_ptr<emumba::connector::https::client> _https_session;
+  std::map<std::string, std::string> _header;
+  std::string req_method = "";
+  std::string req_target = "";
 #endif
 #if defined TRACEPOINTS || defined ORDER_ENTRY_TRACEPOINTS
   rakurai::utils::timer* _mytimer;
