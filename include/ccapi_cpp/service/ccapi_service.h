@@ -187,32 +187,64 @@ class Service : public std::enable_shared_from_this<Service> {
   virtual void subscribe(std::vector<Subscription>& subscriptionList) {}
 #ifdef ENABLE_EPOLL_HTTPS_CLIENT
   void prepareOnReadResponse(const std::string& response, http::request<http::string_body> req,
-                             std::function<void(const http::response<http::string_body>&)> responseHandler) {
+                             std::function<void(const http::response<http::string_body>&)> responseHandler,
+                             std::function<void(const beast::error_code&)> errorHandler) {
     CCAPI_LOGGER_INFO("Response received(OnRead), response: " + response);
+    rj::Document document;
+    if (document.Parse(response.c_str()).HasParseError()) {
+      CCAPI_LOGGER_ERROR("Error in parsing response");
+      CCAPI_LOGGER_TRACE("fail");
+      boost::system::error_code ec;
+      int errorCodeValue = -1;
+      ec.assign(errorCodeValue, boost::system::generic_category());
+      errorHandler(ec);
+      return;
+    } else {
 #if defined(CCAPI_ENABLE_LOG_DEBUG) || defined(CCAPI_ENABLE_LOG_TRACE)
-    std::ostringstream oss;
-    oss << req;
-    CCAPI_LOGGER_DEBUG("req = \n" + oss.str());
+      std::ostringstream oss;
+      oss << req;
+      CCAPI_LOGGER_DEBUG("req = \n" + oss.str());
 #endif
-    std::shared_ptr<http::response<http::string_body>> resPtr(new http::response<http::string_body>());
-    resPtr->result(http::status::ok);
-    resPtr->body() = response;
-    responseHandler(*resPtr);
+      std::shared_ptr<http::response<http::string_body>> resPtr(new http::response<http::string_body>());
+      resPtr->result(http::status::ok);
+      resPtr->body() = response;
+      responseHandler(*resPtr);
+    }
   }
   void prepareOnRead_2Response(const std::string& response, const Request& request, Queue<Event>* eventQueuePtr) {
-    CCAPI_LOGGER_INFO("Response received(OnRead_2), response: " + response);
-    CCAPI_LOGGER_INFO("Request: " + request.toString());
-    this->processSuccessfulTextMessageRest(200, request, response, UtilTime::now(), eventQueuePtr);
+    rj::Document document;
+    if (document.Parse(response.c_str()).HasParseError()) {
+      CCAPI_LOGGER_ERROR("Error in parsing response");
+      CCAPI_LOGGER_TRACE("fail");
+      boost::system::error_code ec;
+      int errorCodeValue = -1;
+      ec.assign(errorCodeValue, boost::system::generic_category());
+      this->onError(Event::Type::REQUEST_STATUS, Message::Type::REQUEST_FAILURE, ec, "response", {request.getCorrelationId()}, eventQueuePtr);
+      return;
+    } else {
+      CCAPI_LOGGER_INFO("Response received(OnRead_2), response: " + response);
+      CCAPI_LOGGER_INFO("Request: " + request.toString());
+      this->processSuccessfulTextMessageRest(200, request, response, UtilTime::now(), eventQueuePtr);
+    }
   }
   void onEpollHttpOpen() { CCAPI_LOGGER_INFO("HTTPS connection established successfully for exchange: " + this->exchangeName); }
   void onEpollHttpClose() { CCAPI_LOGGER_ERROR("HTTPS connection failed for exchange: " + this->exchangeName); }
-  void createNewHttpSession(emumba::connector::io_handler& io_) {
+  void createNewHttpSession(emumba::connector::io_handler& io) {
     CCAPI_LOGGER_DEBUG("Creating new http session on uri: " + this->hostRest);
-    _https_session = std::make_shared<emumba::connector::https::client>(io_, io_.get_logger_name());
+    _https_session = std::make_shared<emumba::connector::https::client>(io, io.get_logger_name());
     if (_https_session->connect(("https://" + this->hostRest), std::bind(&ccapi::Service::onEpollHttpOpen, this),
                                 std::bind(&ccapi::Service::onEpollHttpClose, this)) < 0) {
       onEpollHttpClose();
     }
+  }
+  std::shared_ptr<emumba::connector::https::client> createNewHttpSessionOnHost(const std::string& host_address, emumba::connector::io_handler& io) {
+    CCAPI_LOGGER_DEBUG("Creating new http session on uri: " + this->hostRest);
+    std::shared_ptr<emumba::connector::https::client> new_session = std::make_shared<emumba::connector::https::client>(io, io.get_logger_name());
+    _active_https_session_list.push_back(new_session);
+    if (new_session->connect(host_address, std::bind(&ccapi::Service::onEpollHttpOpen, this), std::bind(&ccapi::Service::onEpollHttpClose, this)) < 0) {
+      onEpollHttpClose();
+    }
+    return new_session;
   }
 #endif
 #if defined TRACEPOINTS || defined ORDER_ENTRY_TRACEPOINTS
@@ -424,8 +456,8 @@ class Service : public std::enable_shared_from_this<Service> {
     req_method = req.base().method_string().to_string();
     req_target = req.target().to_string();
     CCAPI_LOGGER_DEBUG("Sending new request Method: " + req_method + " Target: " + req_target);
-    _https_session->send(std::bind(&ccapi::Service::prepareOnReadResponse, this, std::placeholders::_1, req, responseHandler), req_method, req_target, "",
-                         _header);
+    _https_session->send(std::bind(&ccapi::Service::prepareOnReadResponse, this, std::placeholders::_1, req, responseHandler, errorHandler), req_method,
+                         req_target, "", _header);
     return;
 #else
     std::shared_ptr<beast::ssl_stream<beast::tcp_stream>> streamPtr(nullptr);
@@ -1814,6 +1846,7 @@ class Service : public std::enable_shared_from_this<Service> {
 #endif
 #ifdef ENABLE_EPOLL_HTTPS_CLIENT
   std::shared_ptr<emumba::connector::https::client> _https_session;
+  std::vector<std::shared_ptr<emumba::connector::https::client>> _active_https_session_list;
   std::map<std::string, std::string> _header;
   std::string req_method = "";
   std::string req_target = "";

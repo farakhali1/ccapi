@@ -2,6 +2,7 @@
 #define INCLUDE_CCAPI_CPP_CCAPI_SESSION_H_
 #include "ccapi_cpp/ccapi_macro.h"
 #ifdef ENABLE_EPOLL_HTTPS_CLIENT
+#include "https_client.h"
 #include "io_handler.h"
 #endif
 // start: enable exchanges for market data
@@ -943,6 +944,12 @@ class Session {
         }
       }
     }
+  }
+#endif
+#ifdef ENABLE_EPOLL_HTTPS_CLIENT
+  std::shared_ptr<emumba::connector::https::client> createNewHttpSessionOnHost(const std::string& host_address, std::string market_side,
+                                                                               std::string exchnage_name) {
+    return this->serviceByServiceNameExchangeMap.at(market_side).at(exchnage_name)->createNewHttpSessionOnHost(host_address, _io_handler);
   }
 #endif
 #if defined TRACEPOINTS || defined ORDER_ENTRY_TRACEPOINTS
