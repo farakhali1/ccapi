@@ -201,20 +201,17 @@ class Service : public std::enable_shared_from_this<Service> {
   }
   void prepareOnRead_2Response(const std::string& response, const Request& request, Queue<Event>* eventQueuePtr) {
     CCAPI_LOGGER_INFO("Response received(OnRead_2), response: " + response);
-#if defined(CCAPI_ENABLE_LOG_DEBUG) || defined(CCAPI_ENABLE_LOG_TRACE)
-    std::ostringstream oss;
-    oss << request;
-    CCAPI_LOGGER_DEBUG("req = \n" + oss.str());
-#endif
-    ccapi::Service::processSuccessfulTextMessageRest(200, request, response, UtilTime::now(), eventQueuePtr);
+    CCAPI_LOGGER_INFO("Request: " + request.toString());
+    this->processSuccessfulTextMessageRest(200, request, response, UtilTime::now(), eventQueuePtr);
   }
-  void onOpen() { CCAPI_LOGGER_INFO("HTTPS connection established successfully for exchange: " + this->exchangeName); }
-  void onClose() { CCAPI_LOGGER_ERROR("HTTPS connection failed for exchange: " + this->exchangeName); }
+  void onEpollHttpOpen() { CCAPI_LOGGER_INFO("HTTPS connection established successfully for exchange: " + this->exchangeName); }
+  void onEpollHttpClose() { CCAPI_LOGGER_ERROR("HTTPS connection failed for exchange: " + this->exchangeName); }
   void createNewHttpSession(emumba::connector::io_handler& io_) {
     CCAPI_LOGGER_DEBUG("Creating new http session on uri: " + this->hostRest);
     _https_session = std::make_shared<emumba::connector::https::client>(io_, io_.get_logger_name());
-    if (_https_session->connect(("https://" + this->hostRest), std::bind(&ccapi::Service::onOpen, this), std::bind(&ccapi::Service::onClose, this)) < 0) {
-      on_close();
+    if (_https_session->connect(("https://" + this->hostRest), std::bind(&ccapi::Service::onEpollHttpOpen, this),
+                                std::bind(&ccapi::Service::onEpollHttpClose, this)) < 0) {
+      onEpollHttpClose();
     }
   }
 #endif
