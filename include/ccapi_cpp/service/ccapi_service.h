@@ -228,19 +228,29 @@ class Service : public std::enable_shared_from_this<Service> {
     }
   }
   void onEpollHttpOpen() { CCAPI_LOGGER_INFO("HTTPS connection established successfully for exchange: " + this->exchangeName); }
-  void onEpollHttpClose() { CCAPI_LOGGER_ERROR("HTTPS connection failed for exchange: " + this->exchangeName); }
-  void createNewHttpSession(emumba::connector::io_handler& io, bool create_dummy_session = false) {
+  void onEpollHttpClose() {
+    is_dummy_connection_established = false;
+    CCAPI_LOGGER_ERROR("HTTPS connection failed for exchange: " + this->exchangeName);
+  }
+  void createNewHttpSession(emumba::connector::io_handler& io, bool create_loopback_session = false) {
     CCAPI_LOGGER_DEBUG("Creating new http session on uri: " + this->hostRest);
     _https_session = std::make_shared<emumba::connector::https::client>(io, io.get_logger_name());
     if (_https_session->connect(("https://" + this->hostRest), std::bind(&ccapi::Service::onEpollHttpOpen, this),
                                 std::bind(&ccapi::Service::onEpollHttpClose, this)) < 0) {
       onEpollHttpClose();
     }
-    if (create_dummy_session) {
-      _dummy_https_session = std::make_shared<emumba::connector::https::client>(io, io.get_logger_name());
-      if (_dummy_https_session->connect("https://127.0.0.1:8000", std::bind(&ccapi::Service::onEpollHttpOpen, this),
-                                        std::bind(&ccapi::Service::onEpollHttpClose, this)) < 0) {
-        onEpollHttpClose();
+    if (create_loopback_session) {
+      const char* env_p = std::getenv("LOOPBACK_IP");
+      if (!env_p) {
+        CCAPI_LOGGER_ERROR("IP address for loopback is not set | unable to create loopback connection");
+      } else {
+        CCAPI_LOGGER_INFO("Connecting to URL: " + std::string(env_p) + " for loopback connection");
+        _dummy_https_session = std::make_shared<emumba::connector::https::client>(io, io.get_logger_name());
+        if (_dummy_https_session->connect(std::string(env_p), std::bind(&ccapi::Service::onEpollHttpOpen, this),
+                                          std::bind(&ccapi::Service::onEpollHttpClose, this)) < 0) {
+          onEpollHttpClose();
+        }
+        is_dummy_connection_established = true;
       }
     }
   }
@@ -272,9 +282,13 @@ class Service : public std::enable_shared_from_this<Service> {
     req_target = req.target().to_string();
     CCAPI_LOGGER_DEBUG("Sending new request Method: " + req_method + " Target: " + req_target);
     if (request.getCorrelationId().find("TestOrder") != std::string::npos) {
-      CCAPI_LOGGER_DEBUG("Sending new request | Type: " + request.getCorrelationId());
-      _dummy_https_session->send(std::bind(&ccapi::Service::prepareOnRead_2Response, this, std::placeholders::_1, request, eventQueuePtr), req_method,
-                                 req_target, "", _header);
+      if (is_dummy_connection_established) {
+        CCAPI_LOGGER_DEBUG("Sending new request | Type: " + request.getCorrelationId());
+        _dummy_https_session->send(std::bind(&ccapi::Service::prepareOnRead_2Response, this, std::placeholders::_1, request, eventQueuePtr), req_method,
+                                   req_target, "", _header);
+      } else {
+        CCAPI_LOGGER_ERROR("Dummy connection not established unable to send dummy request | Type: " + request.getCorrelationId());
+      }
     } else {
       CCAPI_LOGGER_DEBUG("Sending new request | Type: " + request.getCorrelationId());
       _https_session->send(std::bind(&ccapi::Service::prepareOnRead_2Response, this, std::placeholders::_1, request, eventQueuePtr), req_method, req_target, "",
@@ -1852,6 +1866,7 @@ class Service : public std::enable_shared_from_this<Service> {
 #ifdef ENABLE_EPOLL_HTTPS_CLIENT
   std::shared_ptr<emumba::connector::https::client> _https_session;
   std::shared_ptr<emumba::connector::https::client> _dummy_https_session;
+  bool is_dummy_connection_established = false;
   std::map<std::string, std::string> _header;
   std::string req_method = "";
   std::string req_target = "";

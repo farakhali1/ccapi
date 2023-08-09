@@ -607,9 +607,12 @@ class Session {
         CCAPI_LOGGER_INFO("enabled service: " + serviceName + ", exchange: " + exchange);
 #ifdef ENABLE_EPOLL_HTTPS_CLIENT
         auto service_Ptr = y.second;
+#ifdef ENABLE_LOOPBACK
         if (serviceName == "execution_management") {
           service_Ptr->createNewHttpSession(_io_handler, true);
-        } else {
+        } else
+#endif
+        {
           service_Ptr->createNewHttpSession(_io_handler);
         }
         CCAPI_LOGGER_INFO("create new HTTP session for service: " + serviceName + ", exchange: " + exchange);
