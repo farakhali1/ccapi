@@ -596,7 +596,7 @@
 #define CCAPI_BINANCE_LISTEN_KEY_ISOLATED_MARGIN_PATH "/sapi/v1/userDataStream/isolated"
 #endif
 #ifndef CCAPI_BINANCE_USDS_FUTURES_URL_REST_BASE
-#define CCAPI_BINANCE_USDS_FUTURES_URL_REST_BASE "https://fapi.binance.com"
+#define CCAPI_BINANCE_USDS_FUTURES_URL_REST_BASE "https://testnet.binancefuture.com"
 #endif
 #ifndef CCAPI_BINANCE_USDS_FUTURES_CREATE_ORDER_PATH
 #define CCAPI_BINANCE_USDS_FUTURES_CREATE_ORDER_PATH "/fapi/v1/order"
