@@ -7,8 +7,8 @@ namespace ccapi {
 class MarketDataServiceGateioPerpetualFutures : public MarketDataServiceGateioBase {
  public:
   MarketDataServiceGateioPerpetualFutures(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                                          std::shared_ptr<ServiceContext> serviceContextPtr)
-      : MarketDataServiceGateioBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+                                          std::shared_ptr<ServiceContext> serviceContextPtr, emumba::connector::io_handler& io)
+      : MarketDataServiceGateioBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_GATEIO_PERPETUAL_FUTURES;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/v4/ws/";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);

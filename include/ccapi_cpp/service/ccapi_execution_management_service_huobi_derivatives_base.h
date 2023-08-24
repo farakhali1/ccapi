@@ -8,8 +8,8 @@ namespace ccapi {
 class ExecutionManagementServiceHuobiDerivativesBase : public ExecutionManagementServiceHuobiBase {
  public:
   ExecutionManagementServiceHuobiDerivativesBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions,
-                                                 SessionConfigs sessionConfigs, ServiceContextPtr serviceContextPtr)
-      : ExecutionManagementServiceHuobiBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+                                                 SessionConfigs sessionConfigs, ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
+      : ExecutionManagementServiceHuobiBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
     this->isDerivatives = true;
     // this->convertNumberToStringInJsonRegex = std::regex("(\\[|,|\":)\\s?(-?\\d+\\.?\\d*[eE]?-?\\d*)");
     this->needDecompressWebsocketMessage = true;

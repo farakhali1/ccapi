@@ -118,7 +118,7 @@ class Service : public std::enable_shared_from_this<Service> {
     return output;
   }
   Service(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-          ServiceContextPtr serviceContextPtr)
+          ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
       : eventHandler(eventHandler),
         sessionOptions(sessionOptions),
         sessionConfigs(sessionConfigs),
@@ -1339,6 +1339,36 @@ class Service : public std::enable_shared_from_this<Service> {
   virtual void onTextMessage(wspp::connection_hdl hdl, const std::string& textMessage, const TimePoint& timeReceived) {}
 
 #else
+
+  // #elseif ENABLE_EPOLL_WS_CLIENT
+  virtual void prepareConnect(std::shared_ptr<EpollWs> wsConnectionPtr) {
+    CCAPI_LOGGER_INFO("I'm here");
+    this->connect(wsConnectionPtr);
+  }
+  virtual void connect(std::shared_ptr<EpollWs> wsConnectionPtr) {
+    CCAPI_LOGGER_FUNCTION_ENTER;
+    EpollWs& wsConnection = *wsConnectionPtr;
+    wsConnection.status = EpollWs::Status::CONNECTING;
+    CCAPI_LOGGER_DEBUG("connection initialization on dummy id " + wsConnection.id);
+    std::string url = wsConnection.getUrl();
+    CCAPI_LOGGER_DEBUG("url = " + url);
+    CCAPI_LOGGER_DEBUG("endpoint tls init handler set");
+    wsConnection._socket->set_connect_callback(std::bind(&Service::onOpen1, shared_from_this(), wsConnectionPtr));
+    wsConnection._socket->connect(url);
+
+    CCAPI_LOGGER_FUNCTION_EXIT;
+  }
+  virtual void onOpen1(std::shared_ptr<EpollWs> wsConnectionPtr) {
+    CCAPI_LOGGER_FUNCTION_ENTER;
+    auto now = UtilTime::now();
+    EpollWs& wsConnection = *wsConnectionPtr;
+    wsConnection.status = EpollWs::Status::OPEN;
+    CCAPI_LOGGER_INFO("connection " + toString(wsConnection) + " established");
+    auto urlBase = UtilString::split(wsConnection.getUrl(), "?").at(0);
+    this->connectNumRetryOnFailByConnectionUrlMap[urlBase] = 0;
+    std::vector<std::string> correlationIdList = wsConnection.correlationIdList;
+    CCAPI_LOGGER_DEBUG("correlationIdList = " + toString(correlationIdList));
+  }
 
   void close(std::shared_ptr<WsConnection> wsConnectionPtr, beast::websocket::close_code const code, beast::websocket::close_reason reason, ErrorCode& ec) {
     WsConnection& wsConnection = *wsConnectionPtr;

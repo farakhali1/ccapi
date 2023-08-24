@@ -7,8 +7,8 @@ namespace ccapi {
 class ExecutionManagementServiceFtx : public ExecutionManagementServiceFtxBase {
  public:
   ExecutionManagementServiceFtx(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                                ServiceContextPtr serviceContextPtr)
-      : ExecutionManagementServiceFtxBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+                                ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
+      : ExecutionManagementServiceFtxBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_FTX;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/ws";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);

@@ -7,8 +7,8 @@ namespace ccapi {
 class ExecutionManagementServiceKucoinBase : public ExecutionManagementService {
  public:
   ExecutionManagementServiceKucoinBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                                       ServiceContextPtr serviceContextPtr)
-      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {}
+                                       ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
+      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr,io) {}
   virtual ~ExecutionManagementServiceKucoinBase() {}
 #ifndef CCAPI_EXPOSE_INTERNAL
 

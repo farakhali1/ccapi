@@ -7,8 +7,8 @@ namespace ccapi {
 class ExecutionManagementServiceGateio : public ExecutionManagementServiceGateioBase {
  public:
   ExecutionManagementServiceGateio(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                                   ServiceContextPtr serviceContextPtr)
-      : ExecutionManagementServiceGateioBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+                                   ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
+      : ExecutionManagementServiceGateioBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_GATEIO;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/ws/v4/";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);

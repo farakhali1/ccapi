@@ -8,8 +8,8 @@ namespace ccapi {
 class ExecutionManagementServiceKraken : public ExecutionManagementService {
  public:
   ExecutionManagementServiceKraken(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                                   ServiceContextPtr serviceContextPtr)
-      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+                                   ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
+      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr,io) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_KRAKEN;
     this->baseUrlWs = CCAPI_KRAKEN_URL_WS_BASE_PRIVATE;
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);

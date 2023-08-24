@@ -7,8 +7,8 @@ namespace ccapi {
 class MarketDataServiceMexcFutures : public MarketDataService {
  public:
   MarketDataServiceMexcFutures(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                               std::shared_ptr<ServiceContext> serviceContextPtr)
-      : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+                               std::shared_ptr<ServiceContext> serviceContextPtr, emumba::connector::io_handler& io)
+      : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_MEXC_FUTURES;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/ws";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);

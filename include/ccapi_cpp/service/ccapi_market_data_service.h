@@ -17,8 +17,8 @@ namespace ccapi {
 class MarketDataService : public Service {
  public:
   MarketDataService(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                    std::shared_ptr<ServiceContext> serviceContextPtr)
-      : Service(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+                    std::shared_ptr<ServiceContext> serviceContextPtr, emumba::connector::io_handler& io)
+      : Service(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io), _io(io) {
     CCAPI_LOGGER_FUNCTION_ENTER;
     this->requestOperationToMessageTypeMap = {
         {Request::Operation::GET_RECENT_TRADES, Message::Type::GET_RECENT_TRADES},
@@ -142,8 +142,11 @@ class MarketDataService : public Service {
               return;
             }
             std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(url, instrumentGroup, subscriptionListGivenInstrumentGroup, credential, streamPtr));
+            std::shared_ptr<EpollWs> wsConnectionPtr_temp(
+                new EpollWs(url, instrumentGroup, subscriptionListGivenInstrumentGroup, credential, that->_io, ++(that->_ws_id)));
             CCAPI_LOGGER_WARN("about to subscribe with new wsConnectionPtr " + toString(*wsConnectionPtr));
             that->prepareConnect(wsConnectionPtr);
+            that->prepareConnect(wsConnectionPtr_temp);
           }
         });
       }
@@ -451,6 +454,22 @@ class MarketDataService : public Service {
     }
   }
 #else
+  void connect(std::shared_ptr<EpollWs> wsConnectionPtr) override {
+    CCAPI_LOGGER_FUNCTION_ENTER;
+    Service::connect(wsConnectionPtr);
+    this->instrumentGroupByWsConnectionIdMap.insert(std::pair<std::string, std::string>(wsConnectionPtr->id, wsConnectionPtr->group));
+    CCAPI_LOGGER_DEBUG("this->instrumentGroupByWsConnectionIdMap = " + toString(this->instrumentGroupByWsConnectionIdMap));
+    CCAPI_LOGGER_FUNCTION_EXIT;
+  }
+  void onOpen1(std::shared_ptr<EpollWs> wsConnectionPtr) override {
+    CCAPI_LOGGER_FUNCTION_ENTER;
+    EpollWs& wsConnection = *wsConnectionPtr;
+    auto now = UtilTime::now();
+    Service::onOpen1(wsConnectionPtr);
+    auto credential = wsConnection.credential;
+    CCAPI_LOGGER_INFO("EpollWs onOpen");
+  }
+
   void processMarketDataMessageList(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view textMessage, const TimePoint& timeReceived,
                                     Event& event, std::vector<MarketDataMessage>& marketDataMessageList) {
     CCAPI_LOGGER_TRACE("marketDataMessageList = " + toString(marketDataMessageList));
@@ -1794,6 +1813,8 @@ class MarketDataService : public Service {
       marketDataMessageDataBufferByConnectionIdExchangeSubscriptionIdVersionIdMap;
   std::map<std::string, std::map<std::string, int64_t>> orderbookVersionIdByConnectionIdExchangeSubscriptionIdMap;
   std::map<std::string, std::map<std::string, TimerPtr>> fetchMarketDepthInitialSnapshotTimerByConnectionIdExchangeSubscriptionIdMap;
+  emumba::connector::io_handler& _io;
+  uint _ws_id = 0;
 };
 } /* namespace ccapi */
 #endif

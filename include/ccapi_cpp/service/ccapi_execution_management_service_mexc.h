@@ -7,8 +7,8 @@ namespace ccapi {
 class ExecutionManagementServiceMexc : public ExecutionManagementService {
  public:
   ExecutionManagementServiceMexc(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                                 ServiceContextPtr serviceContextPtr)
-      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+                                 ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
+      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr,io) {
     this->pingListenKeyIntervalSeconds = 600;
     this->exchangeName = CCAPI_EXCHANGE_NAME_MEXC;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/ws";

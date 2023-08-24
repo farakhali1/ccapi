@@ -28,8 +28,8 @@ class ExecutionManagementService : public Service {
     // DOUBLE, shouldn't be needed because double in a json response needs to parsed as string to preserve its precision
   };
   ExecutionManagementService(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                             ServiceContextPtr serviceContextPtr)
-      : Service(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+                             ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
+      : Service(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr,io) {
     this->requestOperationToMessageTypeMap = {
         {Request::Operation::CREATE_ORDER, Message::Type::CREATE_ORDER},
         {Request::Operation::CANCEL_ORDER, Message::Type::CANCEL_ORDER},
