@@ -1341,11 +1341,11 @@ class Service : public std::enable_shared_from_this<Service> {
 #else
 
   // #elseif ENABLE_EPOLL_WS_CLIENT
-  virtual void prepareConnect(std::shared_ptr<EpollWs> wsConnectionPtr) {
+  virtual void prepareConnectEpoll(std::shared_ptr<EpollWs> wsConnectionPtr) {
     CCAPI_LOGGER_INFO("I'm here");
-    this->connect(wsConnectionPtr);
+    this->connectEpoll(wsConnectionPtr);
   }
-  virtual void connect(std::shared_ptr<EpollWs> wsConnectionPtr) {
+  virtual void connectEpoll(std::shared_ptr<EpollWs> wsConnectionPtr) {
     CCAPI_LOGGER_FUNCTION_ENTER;
     EpollWs& wsConnection = *wsConnectionPtr;
     wsConnection.status = EpollWs::Status::CONNECTING;
@@ -1353,12 +1353,26 @@ class Service : public std::enable_shared_from_this<Service> {
     std::string url = wsConnection.getUrl();
     CCAPI_LOGGER_DEBUG("url = " + url);
     CCAPI_LOGGER_DEBUG("endpoint tls init handler set");
-    wsConnection._socket->set_connect_callback(std::bind(&Service::onOpen1, shared_from_this(), wsConnectionPtr));
-    wsConnection._socket->connect(url);
+    wsConnection._socket->set_connect_callback(std::bind(&Service::onOpenEpoll, shared_from_this(), wsConnectionPtr));
+    wsConnection._socket->set_receive_callback(std::bind(&Service::onMessageEpoll, shared_from_this(), wsConnectionPtr, std::placeholders::_1));
 
+    if (wsConnection._socket->connect(url)) {
+      CCAPI_LOGGER_TRACE("unable to open epoll ws connection");
+      // this->onFail(wsConnectionPtr);
+      // return;
+    } else {
+      CCAPI_LOGGER_TRACE("epoll ws connection opened successfully");
+      this->epollWsConnectionByIdMap.insert(std::make_pair(wsConnectionPtr->id, wsConnectionPtr));
+    }
+    // if (this->sessionOptions.enableCheckPingPongWebsocketProtocolLevel) {
+    //   con->set_pong_handler(std::bind(&Service::onPong, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
+    // }
+    // con->set_ping_handler(std::bind(&Service::onPing, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
+    // this->serviceContextPtr->tlsClientPtr->connect(con);
+    // CCAPI_LOGGER_FUNCTION_EXIT;
     CCAPI_LOGGER_FUNCTION_EXIT;
   }
-  virtual void onOpen1(std::shared_ptr<EpollWs> wsConnectionPtr) {
+  virtual void onOpenEpoll(std::shared_ptr<EpollWs> wsConnectionPtr) {
     CCAPI_LOGGER_FUNCTION_ENTER;
     auto now = UtilTime::now();
     EpollWs& wsConnection = *wsConnectionPtr;
@@ -1368,6 +1382,22 @@ class Service : public std::enable_shared_from_this<Service> {
     this->connectNumRetryOnFailByConnectionUrlMap[urlBase] = 0;
     std::vector<std::string> correlationIdList = wsConnection.correlationIdList;
     CCAPI_LOGGER_DEBUG("correlationIdList = " + toString(correlationIdList));
+  }
+  void onMessageEpoll(std::shared_ptr<EpollWs> wsConnectionPtr, std::string resp_payload) {
+    auto now = UtilTime::now();
+    EpollWs& wsConnection = *wsConnectionPtr;
+    CCAPI_LOGGER_DEBUG("received a message from connection " + toString(wsConnection));
+    if (wsConnection.status != EpollWs::Status::OPEN && !this->shouldProcessRemainingMessageOnClosingByConnectionIdMap[wsConnection.id]) {
+      CCAPI_LOGGER_WARN("should not process remaining message on closing");
+      return;
+    }
+    CCAPI_LOGGER_DEBUG(std::string("received a text message: ") + std::string(resp_payload));
+    // try {
+    //   this->onTextMessage(wsConnectionPtr, resp_payload, now);
+    // } catch (const std::exception& e) {
+    //   CCAPI_LOGGER_ERROR(std::string("textMessage = ") + std::string(textMessage));
+    //   this->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::GENERIC_ERROR, e);
+    // }
   }
 
   void close(std::shared_ptr<WsConnection> wsConnectionPtr, beast::websocket::close_code const code, beast::websocket::close_reason reason, ErrorCode& ec) {
@@ -1804,6 +1834,10 @@ class Service : public std::enable_shared_from_this<Service> {
   void send(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view payload, ErrorCode& ec) {
     this->writeMessage(wsConnectionPtr, payload.data(), payload.length());
   }
+  void sendEpoll(std::shared_ptr<EpollWs> wsConnectionPtr, std::string payload) {
+    EpollWs& wsConnection = *wsConnectionPtr;
+    wsConnection._socket->send(payload);
+  }
   void ping(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view payload, ErrorCode& ec) {
     if (!this->wsConnectionPendingPingingByIdMap[wsConnectionPtr->id]) {
       auto& stream = *wsConnectionPtr->streamPtr;
@@ -1929,6 +1963,7 @@ class Service : public std::enable_shared_from_this<Service> {
 #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
   std::map<std::string, WsConnection> wsConnectionByIdMap;
 #else
+  std::map<std::string, std::shared_ptr<EpollWs>> epollWsConnectionByIdMap;
   std::map<std::string, std::shared_ptr<WsConnection>> wsConnectionByIdMap;  // TODO(cryptochassis): for consistency, to be renamed to wsConnectionPtrByIdMap
   std::map<std::string, beast::flat_buffer> readMessageBufferByConnectionIdMap;
   std::map<std::string, std::array<char, CCAPI_WEBSOCKET_WRITE_BUFFER_SIZE>> writeMessageBufferByConnectionIdMap;

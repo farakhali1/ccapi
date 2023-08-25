@@ -141,12 +141,12 @@ class MarketDataService : public Service {
               that->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::SUBSCRIPTION_FAILURE, ec, "create stream", correlationIdList);
               return;
             }
-            std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(url, instrumentGroup, subscriptionListGivenInstrumentGroup, credential, streamPtr));
-            std::shared_ptr<EpollWs> wsConnectionPtr_temp(
+            // std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(url, instrumentGroup, subscriptionListGivenInstrumentGroup, credential, streamPtr));
+            std::shared_ptr<EpollWs> wsConnectionPtr_epoll(
                 new EpollWs(url, instrumentGroup, subscriptionListGivenInstrumentGroup, credential, that->_io, ++(that->_ws_id)));
-            CCAPI_LOGGER_WARN("about to subscribe with new wsConnectionPtr " + toString(*wsConnectionPtr));
-            that->prepareConnect(wsConnectionPtr);
-            that->prepareConnect(wsConnectionPtr_temp);
+            CCAPI_LOGGER_WARN("about to subscribe with new wsConnectionPtr " + toString(*wsConnectionPtr_epoll));
+            // that->prepareConnect(wsConnectionPtr);
+            that->prepareConnectEpoll(wsConnectionPtr_epoll);
           }
         });
       }
@@ -454,20 +454,80 @@ class MarketDataService : public Service {
     }
   }
 #else
-  void connect(std::shared_ptr<EpollWs> wsConnectionPtr) override {
+  void connectEpoll(std::shared_ptr<EpollWs> wsConnectionPtr) override {
     CCAPI_LOGGER_FUNCTION_ENTER;
-    Service::connect(wsConnectionPtr);
+    Service::connectEpoll(wsConnectionPtr);
     this->instrumentGroupByWsConnectionIdMap.insert(std::pair<std::string, std::string>(wsConnectionPtr->id, wsConnectionPtr->group));
     CCAPI_LOGGER_DEBUG("this->instrumentGroupByWsConnectionIdMap = " + toString(this->instrumentGroupByWsConnectionIdMap));
     CCAPI_LOGGER_FUNCTION_EXIT;
   }
-  void onOpen1(std::shared_ptr<EpollWs> wsConnectionPtr) override {
+  void onOpenEpoll(std::shared_ptr<EpollWs> wsConnectionPtr) override {
     CCAPI_LOGGER_FUNCTION_ENTER;
     EpollWs& wsConnection = *wsConnectionPtr;
     auto now = UtilTime::now();
-    Service::onOpen1(wsConnectionPtr);
+    Service::onOpenEpoll(wsConnectionPtr);
     auto credential = wsConnection.credential;
     CCAPI_LOGGER_INFO("EpollWs onOpen");
+    // if (!credential.empty()) {
+    //   this->logonToExchange(wsConnectionPtr, now, credential);
+    // } else {
+    this->startSubscribeEpoll(wsConnectionPtr);
+    // }
+  }
+  void startSubscribeEpoll(std::shared_ptr<EpollWs> wsConnectionPtr) {
+    EpollWs& wsConnection = *wsConnectionPtr;
+    auto instrumentGroup = wsConnection.group;
+    for (const auto& subscription : wsConnection.subscriptionList) {
+      auto instrument = subscription.getInstrument();
+      this->subscriptionStatusByInstrumentGroupInstrumentMap[instrumentGroup][instrument] = Subscription::Status::SUBSCRIBING;
+      // if (subscription.getRawOptions().empty()) {
+      this->prepareSubscriptionEpoll(wsConnectionPtr, subscription);
+      // } else {
+      //   this->correlationIdByConnectionIdMap.insert({wsConnection.id, subscription.getCorrelationId()});
+      // }
+    }
+    CCAPI_LOGGER_INFO("about to subscribe to exchange");
+    this->subscribeToExchangeEpoll(wsConnectionPtr);
+  }
+
+  void prepareSubscriptionEpoll(std::shared_ptr<EpollWs> wsConnectionPtr, const Subscription& subscription) {
+    EpollWs& wsConnection = *wsConnectionPtr;
+    auto instrument = subscription.getInstrument();
+    CCAPI_LOGGER_TRACE("instrument = " + instrument);
+    std::string symbolId = instrument;
+    CCAPI_LOGGER_TRACE("symbolId = " + symbolId);
+    auto field = subscription.getField();
+    CCAPI_LOGGER_TRACE("field = " + field);
+    auto optionMap = subscription.getOptionMap();
+    CCAPI_LOGGER_TRACE("optionMap = " + toString(optionMap));
+    std::string channelId = this->sessionConfigs.getExchangeFieldWebsocketChannelMap().at(this->exchangeName).at(field);
+    CCAPI_LOGGER_TRACE("channelId = " + channelId);
+    CCAPI_LOGGER_TRACE("this->exchangeName = " + this->exchangeName);
+    this->prepareSubscriptionDetailEpoll(channelId, symbolId, field, wsConnectionPtr, subscription, optionMap);
+    CCAPI_LOGGER_TRACE("channelId = " + channelId);
+    this->correlationIdListByConnectionIdChannelIdSymbolIdMap[wsConnection.id][channelId][symbolId].push_back(subscription.getCorrelationId());
+    this->subscriptionListByConnectionIdChannelIdSymbolIdMap[wsConnection.id][channelId][symbolId].push_back(subscription);
+    this->fieldByConnectionIdChannelIdSymbolIdMap[wsConnection.id][channelId][symbolId] = field;
+    this->optionMapByConnectionIdChannelIdSymbolIdMap[wsConnection.id][channelId][symbolId].insert(optionMap.begin(), optionMap.end());
+    CCAPI_LOGGER_TRACE("this->marketDepthSubscribedToExchangeByConnectionIdChannelIdSymbolIdMap = " +
+                       toString(this->marketDepthSubscribedToExchangeByConnectionIdChannelIdSymbolIdMap));
+    CCAPI_LOGGER_TRACE("this->correlationIdListByConnectionIdChannelSymbolIdMap = " + toString(this->correlationIdListByConnectionIdChannelIdSymbolIdMap));
+    CCAPI_LOGGER_FUNCTION_EXIT;
+  }
+  virtual void subscribeToExchangeEpoll(std::shared_ptr<EpollWs> wsConnectionPtr) {
+    EpollWs& wsConnection = *wsConnectionPtr;
+    CCAPI_LOGGER_INFO("exchange is " + this->exchangeName);
+    std::vector<std::string> sendStringList;
+    if (this->correlationIdByConnectionIdMap.find(wsConnection.id) == this->correlationIdByConnectionIdMap.end()) {
+      sendStringList = this->createSendStringListEpoll(wsConnectionPtr);
+    } else {
+      auto subscription = wsConnection.subscriptionList.at(0);
+      sendStringList = std::vector<std::string>(1, subscription.getRawOptions());
+    }
+    for (const auto& sendString : sendStringList) {
+      CCAPI_LOGGER_INFO("sendString = " + sendString);
+      this->sendEpoll(wsConnectionPtr, sendString);
+    }
   }
 
   void processMarketDataMessageList(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view textMessage, const TimePoint& timeReceived,
@@ -1771,6 +1831,9 @@ class MarketDataService : public Service {
     return {};
   }
   virtual std::vector<std::string> createSendStringList(const WsConnection& wsConnection) { return {}; }
+  virtual std::vector<std::string> createSendStringListEpoll(std::shared_ptr<EpollWs> wsConnectionPtr) { return {}; }
+  virtual void prepareSubscriptionDetailEpoll(std::string& channelId, std::string& symbolId, const std::string& field, std::shared_ptr<EpollWs> wsConnectionPtr,
+                                              const Subscription& subscription, const std::map<std::string, std::string> optionMap) {}
   virtual void prepareSubscriptionDetail(std::string& channelId, std::string& symbolId, const std::string& field, const WsConnection& wsConnection,
                                          const Subscription& subscription, const std::map<std::string, std::string> optionMap) {}
   virtual void createFetchOrderBookInitialReq(http::request<http::string_body>& req, const std::string& symbolId, const TimePoint& now,

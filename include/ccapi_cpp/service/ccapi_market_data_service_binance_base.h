@@ -32,7 +32,36 @@ class MarketDataServiceBinanceBase : public MarketDataService {
     Service::onOpen(wsConnectionPtr);
     this->startSubscribe(wsConnectionPtr);
   }
+  void onOpenEpoll(std::shared_ptr<EpollWs> wsConnectionPtr) override {
+    CCAPI_LOGGER_FUNCTION_ENTER;
+    auto now = UtilTime::now();
+    Service::onOpenEpoll(wsConnectionPtr);
+    this->startSubscribeEpoll(wsConnectionPtr);
+  }
 #endif
+  void prepareSubscriptionDetailEpoll(std::string& channelId, std::string& symbolId, const std::string& field, std::shared_ptr<EpollWs> wsConnectionPtr,
+                                      const Subscription& subscription, const std::map<std::string, std::string> optionMap) override {
+    EpollWs& wsConnection = *wsConnectionPtr;
+    auto marketDepthRequested = std::stoi(optionMap.at(CCAPI_MARKET_DEPTH_MAX));
+    auto conflateIntervalMilliSeconds = std::stoi(optionMap.at(CCAPI_CONFLATE_INTERVAL_MILLISECONDS));
+    if (field == CCAPI_MARKET_DEPTH) {
+      if (marketDepthRequested == 1) {
+        channelId = CCAPI_WEBSOCKET_BINANCE_BASE_CHANNEL_BOOK_TICKER;
+      } else {
+        int marketDepthSubscribedToExchange = 1;
+        marketDepthSubscribedToExchange = this->calculateMarketDepthSubscribedToExchange(marketDepthRequested, std::vector<int>({5, 10, 20}));
+        std::string updateSpeed;
+        if (conflateIntervalMilliSeconds < 1000) {
+          updateSpeed = "100ms";
+        }
+        channelId += std::string("?") + CCAPI_MARKET_DEPTH_SUBSCRIBED_TO_EXCHANGE + "=" + std::to_string(marketDepthSubscribedToExchange);
+        if (!updateSpeed.empty()) {
+          channelId += "&UPDATE_SPEED=" + updateSpeed;
+        }
+        this->marketDepthSubscribedToExchangeByConnectionIdChannelIdSymbolIdMap[wsConnection.id][channelId][symbolId] = marketDepthSubscribedToExchange;
+      }
+    }
+  }
   void prepareSubscriptionDetail(std::string& channelId, std::string& symbolId, const std::string& field, const WsConnection& wsConnection,
                                  const Subscription& subscription, const std::map<std::string, std::string> optionMap) override {
     auto marketDepthRequested = std::stoi(optionMap.at(CCAPI_MARKET_DEPTH_MAX));
@@ -54,6 +83,56 @@ class MarketDataServiceBinanceBase : public MarketDataService {
         this->marketDepthSubscribedToExchangeByConnectionIdChannelIdSymbolIdMap[wsConnection.id][channelId][symbolId] = marketDepthSubscribedToExchange;
       }
     }
+  }
+  std::vector<std::string> createSendStringListEpoll(std::shared_ptr<EpollWs> wsConnectionPtr) override {
+    EpollWs& wsConnection = *wsConnectionPtr;
+    std::vector<std::string> sendStringList;
+    rj::Document document;
+    document.SetObject();
+    rj::Document::AllocatorType& allocator = document.GetAllocator();
+    document.AddMember("method", rj::Value("SUBSCRIBE").Move(), allocator);
+    rj::Value params(rj::kArrayType);
+    std::vector<std::string> exchangeSubscriptionIdList;
+    for (const auto& subscriptionListByChannelIdSymbolId : this->subscriptionListByConnectionIdChannelIdSymbolIdMap.at(wsConnection.id)) {
+      auto channelId = subscriptionListByChannelIdSymbolId.first;
+      for (const auto& subscriptionListByInstrument : subscriptionListByChannelIdSymbolId.second) {
+        auto symbolId = subscriptionListByInstrument.first;
+        auto exchangeSubscriptionId = UtilString::toLower(subscriptionListByInstrument.first) + "@";
+        if (channelId.rfind(CCAPI_WEBSOCKET_BINANCE_BASE_CHANNEL_BOOK_TICKER, 0) == 0) {
+          this->l2UpdateIsReplaceByConnectionIdChannelIdSymbolIdMap[wsConnection.id][channelId][symbolId] = true;
+          exchangeSubscriptionId += CCAPI_WEBSOCKET_BINANCE_BASE_CHANNEL_BOOK_TICKER;
+        } else if (channelId.rfind(CCAPI_WEBSOCKET_BINANCE_BASE_CHANNEL_PARTIAL_BOOK_DEPTH, 0) == 0) {
+          this->l2UpdateIsReplaceByConnectionIdChannelIdSymbolIdMap[wsConnection.id][channelId][symbolId] = true;
+          int marketDepthSubscribedToExchange =
+              this->marketDepthSubscribedToExchangeByConnectionIdChannelIdSymbolIdMap.at(wsConnection.id).at(channelId).at(symbolId);
+          exchangeSubscriptionId += std::string(CCAPI_WEBSOCKET_BINANCE_BASE_CHANNEL_PARTIAL_BOOK_DEPTH) + std::to_string(marketDepthSubscribedToExchange);
+          auto splitted = UtilString::split(channelId, "?");
+          if (splitted.size() == 2) {
+            auto mapped = Url::convertQueryStringToMap(splitted.at(1));
+            if (mapped.find("UPDATE_SPEED") != mapped.end()) {
+              exchangeSubscriptionId += "@" + mapped.at("UPDATE_SPEED");
+            }
+          }
+        } else {
+          exchangeSubscriptionId += channelId;
+        }
+        params.PushBack(rj::Value(exchangeSubscriptionId.c_str(), allocator).Move(), allocator);
+        this->channelIdSymbolIdByConnectionIdExchangeSubscriptionIdMap[wsConnection.id][exchangeSubscriptionId][CCAPI_CHANNEL_ID] = channelId;
+        this->channelIdSymbolIdByConnectionIdExchangeSubscriptionIdMap[wsConnection.id][exchangeSubscriptionId][CCAPI_SYMBOL_ID] = symbolId;
+        exchangeSubscriptionIdList.push_back(exchangeSubscriptionId);
+      }
+    }
+    document.AddMember("params", params, allocator);
+    document.AddMember("id", rj::Value(this->exchangeJsonPayloadIdByConnectionIdMap[wsConnection.id]).Move(), allocator);
+    this->exchangeSubscriptionIdListByExchangeJsonPayloadIdByConnectionIdMap[wsConnection.id][this->exchangeJsonPayloadIdByConnectionIdMap[wsConnection.id]] =
+        exchangeSubscriptionIdList;
+    this->exchangeJsonPayloadIdByConnectionIdMap[wsConnection.id] += 1;
+    rj::StringBuffer stringBuffer;
+    rj::Writer<rj::StringBuffer> writer(stringBuffer);
+    document.Accept(writer);
+    std::string sendString = stringBuffer.GetString();
+    sendStringList.push_back(sendString);
+    return sendStringList;
   }
   std::vector<std::string> createSendStringList(const WsConnection& wsConnection) override {
     std::vector<std::string> sendStringList;
