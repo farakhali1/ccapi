@@ -8,7 +8,7 @@ class ExecutionManagementServiceMexc : public ExecutionManagementService {
  public:
   ExecutionManagementServiceMexc(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                  ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
-      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr,io) {
+      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
     this->pingListenKeyIntervalSeconds = 600;
     this->exchangeName = CCAPI_EXCHANGE_NAME_MEXC;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/ws";
@@ -328,6 +328,105 @@ class ExecutionManagementServiceMexc : public ExecutionManagementService {
       this->pingListenKeyTimerMapByConnectionIdMap.erase(wsConnection.id);
     }
     ExecutionManagementService::onClose(hdl);
+  }
+// Rakurai Changes
+#elif ENABLE_EPOLL_WS_CLIENT
+  void prepareConnect(std::shared_ptr<WsConnection> wsConnectionPtr) override {
+    auto now = UtilTime::now();
+    auto hostPort = this->extractHostFromUrl(this->baseUrlRest);
+    std::string host = hostPort.first;
+    std::string port = hostPort.second;
+    http::request<http::string_body> req;
+    req.set(http::field::host, host);
+    req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+    req.method(http::verb::post);
+    auto credential = wsConnectionPtr->subscriptionList.at(0).getCredential();
+    if (credential.empty()) {
+      credential = this->credentialDefault;
+    }
+    auto apiKey = mapGetWithDefault(credential, this->apiKeyName);
+    req.set("X-MEXC-APIKEY", apiKey);
+    std::string queryString;
+    this->signRequest(queryString, {}, now, credential);
+    req.target(this->listenKeyTarget + "?" + queryString);
+    this->sendRequest(
+        req, [wsConnectionPtr, that = shared_from_base<ExecutionManagementServiceMexc>()](const beast::error_code& ec) { that->onFail_(wsConnectionPtr); },
+        [wsConnectionPtr, that = shared_from_base<ExecutionManagementServiceMexc>()](const http::response<http::string_body>& res) {
+          int statusCode = res.result_int();
+          std::string body = res.body();
+          if (statusCode / 100 == 2) {
+            std::string urlWebsocketBase;
+            try {
+              rj::Document document;
+              document.Parse<rj::kParseNumbersAsStringsFlag>(body.c_str());
+              std::string listenKey = document["listenKey"].GetString();
+              std::string url = that->baseUrlWs + "?listenKey=" + listenKey;
+              wsConnectionPtr->setUrl(url);
+              that->connect(wsConnectionPtr);
+              that->extraPropertyByConnectionIdMap[wsConnectionPtr->id].insert({
+                  {"listenKey", listenKey},
+              });
+              return;
+            } catch (const std::runtime_error& e) {
+              CCAPI_LOGGER_ERROR(std::string("e.what() = ") + e.what());
+            }
+          }
+          that->onFail_(wsConnectionPtr);
+        },
+        this->sessionOptions.httpRequestTimeoutMilliSeconds);
+  }
+  void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override {
+    ExecutionManagementService::onOpen(wsConnectionPtr);
+    this->setPingListenKeyTimer(wsConnectionPtr);
+  }
+  void setPingListenKeyTimer(std::shared_ptr<WsConnection> wsConnectionPtr) {
+    TimerPtr timerPtr(
+        new boost::asio::steady_timer(*this->serviceContextPtr->ioContextPtr, std::chrono::milliseconds(this->pingListenKeyIntervalSeconds * 1000)));
+    timerPtr->async_wait([wsConnectionPtr, that = shared_from_base<ExecutionManagementServiceMexc>()](ErrorCode const& ec) {
+      if (ec) {
+        return;
+      }
+      auto now = UtilTime::now();
+      that->setPingListenKeyTimer(wsConnectionPtr);
+      http::request<http::string_body> req;
+      req.set(http::field::host, that->hostRest);
+      req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+      req.method(http::verb::put);
+      std::string queryString;
+      std::map<std::string, std::string> params;
+      auto listenKey = that->extraPropertyByConnectionIdMap.at(wsConnectionPtr->id).at("listenKey");
+      params.insert({"listenKey", listenKey});
+      for (const auto& param : params) {
+        queryString += param.first + "=" + Url::urlEncode(param.second);
+        queryString += "&";
+      }
+      auto credential = wsConnectionPtr->subscriptionList.at(0).getCredential();
+      if (credential.empty()) {
+        credential = that->credentialDefault;
+      }
+      auto apiKey = mapGetWithDefault(credential, that->apiKeyName);
+      req.set("X-MEXC-APIKEY", apiKey);
+      that->signRequest(queryString, {}, now, credential);
+      req.target(that->listenKeyTarget + "?" + queryString);
+      that->sendRequest(
+          req,
+          [wsConnectionPtr, that_2 = that->shared_from_base<ExecutionManagementServiceMexc>()](const beast::error_code& ec) {
+            CCAPI_LOGGER_ERROR("ping listen key fail");
+            that_2->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::GENERIC_ERROR, ec, "ping listen key");
+          },
+          [wsConnectionPtr, that_2 = that->shared_from_base<ExecutionManagementServiceMexc>()](const http::response<http::string_body>& res) {
+            CCAPI_LOGGER_DEBUG("ping listen key success");
+          },
+          that->sessionOptions.httpRequestTimeoutMilliSeconds);
+    });
+    this->pingListenKeyTimerMapByConnectionIdMap[wsConnectionPtr->id] = timerPtr;
+  }
+  void onClose(std::shared_ptr<WsConnection> wsConnectionPtr, ErrorCode ec) override {
+    if (this->pingListenKeyTimerMapByConnectionIdMap.find(wsConnectionPtr->id) != this->pingListenKeyTimerMapByConnectionIdMap.end()) {
+      this->pingListenKeyTimerMapByConnectionIdMap.at(wsConnectionPtr->id)->cancel();
+      this->pingListenKeyTimerMapByConnectionIdMap.erase(wsConnectionPtr->id);
+    }
+    ExecutionManagementService::onClose(wsConnectionPtr, ec);
   }
 #else
   void prepareConnect(std::shared_ptr<WsConnection> wsConnectionPtr) override {

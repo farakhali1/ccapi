@@ -97,6 +97,53 @@ class MarketDataServiceKucoinBase : public MarketDataService {
         },
         this->sessionOptions.httpRequestTimeoutMilliSeconds);
   }
+  // Rakurai Changes
+#elif ENABLE_EPOLL_WS_CLIENT
+  void pingOnApplicationLevel(std::shared_ptr<WsConnection> wsConnectionPtr, ErrorCode& ec) override {
+    auto now = UtilTime::now();
+    this->send(wsConnectionPtr, "{\"id\":\"" + std::to_string(UtilTime::getUnixTimestamp(now)) + "\",\"type\":\"ping\"}", ec);
+  }
+  void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override { wsConnectionPtr->status = WsConnection::Status::OPEN; }
+  void prepareConnect(std::shared_ptr<WsConnection> wsConnectionPtr) override {
+    http::request<http::string_body> req;
+    req.set(http::field::host, this->hostRest);
+    req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+    req.set(beast::http::field::content_type, "application/json");
+    req.method(http::verb::post);
+    req.target("/api/v1/bullet-public");
+    this->sendRequest(
+        req, [wsConnectionPtr, that = shared_from_base<MarketDataServiceKucoinBase>()](const beast::error_code& ec) { that->onFail_(wsConnectionPtr); },
+        [wsConnectionPtr, that = shared_from_base<MarketDataServiceKucoinBase>()](const http::response<http::string_body>& res) {
+          int statusCode = res.result_int();
+          std::string body = res.body();
+          if (statusCode / 100 == 2) {
+            std::string urlWebsocketBase;
+            try {
+              rj::Document document;
+              document.Parse<rj::kParseNumbersAsStringsFlag>(body.c_str());
+              const rj::Value& instanceServer = document["data"]["instanceServers"][0];
+              urlWebsocketBase += std::string(instanceServer["endpoint"].GetString());
+              urlWebsocketBase += "?token=";
+              urlWebsocketBase += std::string(document["data"]["token"].GetString());
+              wsConnectionPtr->setUrl(urlWebsocketBase);
+              that->connect(wsConnectionPtr);
+              for (const auto& subscription : wsConnectionPtr->subscriptionList) {
+                auto instrument = subscription.getInstrument();
+                that->subscriptionStatusByInstrumentGroupInstrumentMap[wsConnectionPtr->group][instrument] = Subscription::Status::SUBSCRIBING;
+              }
+              that->extraPropertyByConnectionIdMap[wsConnectionPtr->id].insert({
+                  {"pingInterval", std::string(instanceServer["pingInterval"].GetString())},
+                  {"pingTimeout", std::string(instanceServer["pingInterval"].GetString())},
+              });
+              return;
+            } catch (const std::runtime_error& e) {
+              CCAPI_LOGGER_ERROR(std::string("e.what() = ") + e.what());
+            }
+          }
+          that->onFail_(wsConnectionPtr);
+        },
+        this->sessionOptions.httpRequestTimeoutMilliSeconds);
+  }
 #else
   void pingOnApplicationLevel(std::shared_ptr<WsConnection> wsConnectionPtr, ErrorCode& ec) override {
     auto now = UtilTime::now();

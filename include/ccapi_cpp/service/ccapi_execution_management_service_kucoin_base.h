@@ -8,7 +8,7 @@ class ExecutionManagementServiceKucoinBase : public ExecutionManagementService {
  public:
   ExecutionManagementServiceKucoinBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                        ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
-      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr,io) {}
+      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {}
   virtual ~ExecutionManagementServiceKucoinBase() {}
 #ifndef CCAPI_EXPOSE_INTERNAL
 
@@ -68,6 +68,57 @@ class ExecutionManagementServiceKucoinBase : public ExecutionManagementService {
             }
           }
           that->onFail_(thisWsConnection);
+        },
+        this->sessionOptions.httpRequestTimeoutMilliSeconds);
+  }
+// Rakurai Changes
+#elif ENABLE_EPOLL_WS_CLIENT
+  void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override { wsConnectionPtr->status = WsConnection::Status::OPEN; }
+  void pingOnApplicationLevel(std::shared_ptr<WsConnection> wsConnectionPtr, ErrorCode& ec) override {
+    auto now = UtilTime::now();
+    this->send(wsConnectionPtr, "{\"id\":\"" + std::to_string(UtilTime::getUnixTimestamp(now)) + "\",\"type\":\"ping\"}", ec);
+  }
+  void prepareConnect(std::shared_ptr<WsConnection> wsConnectionPtr) override {
+    auto now = UtilTime::now();
+    http::request<http::string_body> req;
+    req.set(http::field::host, this->hostRest);
+    req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+    req.method(http::verb::post);
+    req.target("/api/v1/bullet-private");
+    auto credential = wsConnectionPtr->subscriptionList.at(0).getCredential();
+    if (credential.empty()) {
+      credential = this->credentialDefault;
+    }
+    this->prepareReq(req, now, credential);
+    this->signRequest(req, "", credential);
+    this->sendRequest(
+        req,
+        [wsConnectionPtr, that = shared_from_base<ExecutionManagementServiceKucoinBase>()](const beast::error_code& ec) { that->onFail_(wsConnectionPtr); },
+        [wsConnectionPtr, that = shared_from_base<ExecutionManagementServiceKucoinBase>()](const http::response<http::string_body>& res) {
+          int statusCode = res.result_int();
+          std::string body = res.body();
+          if (statusCode / 100 == 2) {
+            std::string urlWebsocketBase;
+            try {
+              rj::Document document;
+              document.Parse<rj::kParseNumbersAsStringsFlag>(body.c_str());
+              const rj::Value& instanceServer = document["data"]["instanceServers"][0];
+              urlWebsocketBase += std::string(instanceServer["endpoint"].GetString());
+              urlWebsocketBase += "?token=";
+              urlWebsocketBase += std::string(document["data"]["token"].GetString());
+              wsConnectionPtr->setUrl(urlWebsocketBase);
+              std::cout << wsConnectionPtr->toString() << std::endl;
+              that->connect(wsConnectionPtr);
+              that->extraPropertyByConnectionIdMap[wsConnectionPtr->id].insert({
+                  {"pingInterval", std::string(instanceServer["pingInterval"].GetString())},
+                  {"pingTimeout", std::string(instanceServer["pingTimeout"].GetString())},
+              });
+              return;
+            } catch (const std::runtime_error& e) {
+              CCAPI_LOGGER_ERROR(std::string("e.what() = ") + e.what());
+            }
+          }
+          that->onFail_(wsConnectionPtr);
         },
         this->sessionOptions.httpRequestTimeoutMilliSeconds);
   }
@@ -531,8 +582,11 @@ class ExecutionManagementServiceKucoinBase : public ExecutionManagementService {
       }
 #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
       ExecutionManagementService::onOpen(hdl);
-#else
+// Rakurai Changes
+#elif ENABLE_EPOLL_WS_CLIENT
       ExecutionManagementService::onOpen(wsConnectionPtr);
+#else
+    ExecutionManagementService::onOpen(wsConnectionPtr);
 #endif
     } else if (type == "pong") {
       auto now = UtilTime::now();

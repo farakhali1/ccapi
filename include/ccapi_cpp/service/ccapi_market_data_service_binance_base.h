@@ -25,6 +25,14 @@ class MarketDataServiceBinanceBase : public MarketDataService {
     WsConnection& wsConnection = this->getWsConnectionFromConnectionPtr(this->serviceContextPtr->tlsClientPtr->get_con_from_hdl(hdl));
     this->startSubscribe(wsConnection);
   }
+// Rakurai Changes
+#elif ENABLE_EPOLL_WS_CLIENT
+  void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override {
+    CCAPI_LOGGER_FUNCTION_ENTER;
+    auto now = UtilTime::now();
+    Service::onOpen(wsConnectionPtr);
+    this->startSubscribe(wsConnectionPtr);
+  }
 #else
   void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override {
     CCAPI_LOGGER_FUNCTION_ENTER;
@@ -32,36 +40,7 @@ class MarketDataServiceBinanceBase : public MarketDataService {
     Service::onOpen(wsConnectionPtr);
     this->startSubscribe(wsConnectionPtr);
   }
-  void onOpenEpoll(std::shared_ptr<EpollWs> wsConnectionPtr) override {
-    CCAPI_LOGGER_FUNCTION_ENTER;
-    auto now = UtilTime::now();
-    Service::onOpenEpoll(wsConnectionPtr);
-    this->startSubscribeEpoll(wsConnectionPtr);
-  }
 #endif
-  void prepareSubscriptionDetailEpoll(std::string& channelId, std::string& symbolId, const std::string& field, std::shared_ptr<EpollWs> wsConnectionPtr,
-                                      const Subscription& subscription, const std::map<std::string, std::string> optionMap) override {
-    EpollWs& wsConnection = *wsConnectionPtr;
-    auto marketDepthRequested = std::stoi(optionMap.at(CCAPI_MARKET_DEPTH_MAX));
-    auto conflateIntervalMilliSeconds = std::stoi(optionMap.at(CCAPI_CONFLATE_INTERVAL_MILLISECONDS));
-    if (field == CCAPI_MARKET_DEPTH) {
-      if (marketDepthRequested == 1) {
-        channelId = CCAPI_WEBSOCKET_BINANCE_BASE_CHANNEL_BOOK_TICKER;
-      } else {
-        int marketDepthSubscribedToExchange = 1;
-        marketDepthSubscribedToExchange = this->calculateMarketDepthSubscribedToExchange(marketDepthRequested, std::vector<int>({5, 10, 20}));
-        std::string updateSpeed;
-        if (conflateIntervalMilliSeconds < 1000) {
-          updateSpeed = "100ms";
-        }
-        channelId += std::string("?") + CCAPI_MARKET_DEPTH_SUBSCRIBED_TO_EXCHANGE + "=" + std::to_string(marketDepthSubscribedToExchange);
-        if (!updateSpeed.empty()) {
-          channelId += "&UPDATE_SPEED=" + updateSpeed;
-        }
-        this->marketDepthSubscribedToExchangeByConnectionIdChannelIdSymbolIdMap[wsConnection.id][channelId][symbolId] = marketDepthSubscribedToExchange;
-      }
-    }
-  }
   void prepareSubscriptionDetail(std::string& channelId, std::string& symbolId, const std::string& field, const WsConnection& wsConnection,
                                  const Subscription& subscription, const std::map<std::string, std::string> optionMap) override {
     auto marketDepthRequested = std::stoi(optionMap.at(CCAPI_MARKET_DEPTH_MAX));
@@ -84,8 +63,8 @@ class MarketDataServiceBinanceBase : public MarketDataService {
       }
     }
   }
-  std::vector<std::string> createSendStringListEpoll(std::shared_ptr<EpollWs> wsConnectionPtr) override {
-    EpollWs& wsConnection = *wsConnectionPtr;
+  std::vector<std::string> createSendStringListEpoll(std::shared_ptr<WsConnection> wsConnectionPtr) override {
+    WsConnection& wsConnection = *wsConnectionPtr;
     std::vector<std::string> sendStringList;
     rj::Document document;
     document.SetObject();
