@@ -18,6 +18,24 @@ class ExecutionManagementServiceBinanceBase : public ExecutionManagementService 
 
  protected:
 #endif
+
+  bool doesHttpBodyContainError(const std::string& body) override {
+    // std::regex pattern(R"(\{\"code\": (-?\d+),\"msg\": \"(.+?)\"\})");
+    // return !std::regex_search(body, pattern);
+    rj::Document document;
+    document.Parse<rj::kParseNumbersAsStringsFlag>(body.c_str());
+    if (document.IsObject()) {
+      if (document.HasMember("code") && document.HasMember("msg")) {
+        CCAPI_LOGGER_ERROR("error found");
+        return true;
+      } else {
+        CCAPI_LOGGER_ERROR("No error");
+        return false;
+      }
+    } else {
+      return false;
+    }
+  }
 #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
   void prepareConnect(WsConnection& wsConnection) override {
     auto hostPort = this->extractHostFromUrl(this->baseUrlRest);
@@ -150,7 +168,7 @@ class ExecutionManagementServiceBinanceBase : public ExecutionManagementService 
     ExecutionManagementService::onClose(hdl);
   }
 // Rakurai Changes
-#elif ENABLE_EPOLL_WS_CLIENT 
+#elif ENABLE_EPOLL_WS_CLIENT
   void prepareConnect(std::shared_ptr<WsConnection> wsConnectionPtr) override {
     auto hostPort = this->extractHostFromUrl(this->baseUrlRest);
     std::string host = hostPort.first;
@@ -270,12 +288,12 @@ class ExecutionManagementServiceBinanceBase : public ExecutionManagementService 
     });
     this->pingListenKeyTimerMapByConnectionIdMap[wsConnectionPtr->id] = timerPtr;
   }
-  void onClose(std::shared_ptr<WsConnection> wsConnectionPtr, ErrorCode ec) override {
+  void onClose(std::shared_ptr<WsConnection> wsConnectionPtr) override {
     if (this->pingListenKeyTimerMapByConnectionIdMap.find(wsConnectionPtr->id) != this->pingListenKeyTimerMapByConnectionIdMap.end()) {
       this->pingListenKeyTimerMapByConnectionIdMap.at(wsConnectionPtr->id)->cancel();
       this->pingListenKeyTimerMapByConnectionIdMap.erase(wsConnectionPtr->id);
     }
-    ExecutionManagementService::onClose(wsConnectionPtr, ec);
+    ExecutionManagementService::onClose(wsConnectionPtr);
   }
 #else
   void prepareConnect(std::shared_ptr<WsConnection> wsConnectionPtr) override {

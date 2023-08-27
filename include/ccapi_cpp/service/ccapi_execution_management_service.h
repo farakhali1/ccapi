@@ -270,7 +270,7 @@ class ExecutionManagementService : public Service {
     auto credential = wsConnection.credential;
     this->logonToExchange(wsConnectionPtr, now, credential);
   }
-  void onClose(std::shared_ptr<WsConnection> wsConnectionPtr, ErrorCode ec) override {
+  void onClose(std::shared_ptr<WsConnection> wsConnectionPtr) override {
     CCAPI_LOGGER_FUNCTION_ENTER;
     WsConnection& wsConnection = *wsConnectionPtr;
     if (this->correlationIdByConnectionIdMap.find(wsConnection.id) != this->correlationIdByConnectionIdMap.end()) {
@@ -278,7 +278,7 @@ class ExecutionManagementService : public Service {
       this->correlationIdByConnectionIdMap.erase(wsConnection.id);
     }
     this->wsRequestIdByConnectionIdMap.erase(wsConnection.id);
-    Service::onClose(wsConnectionPtr, ec);
+    Service::onClose(wsConnectionPtr);
   }
   virtual void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, const Subscription& subscription, boost::beast::string_view textMessageView,
                              const TimePoint& timeReceived) {}

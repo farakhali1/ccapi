@@ -1342,6 +1342,13 @@ class Service : public std::enable_shared_from_this<Service> {
 #elif ENABLE_EPOLL_WS_CLIENT
   void close(std::shared_ptr<WsConnection> wsConnectionPtr, beast::websocket::close_code const code, beast::websocket::close_reason reason, ErrorCode& ec) {
     CCAPI_LOGGER_FUNCTION_ENTER;
+    WsConnection& wsConnection = *wsConnectionPtr;
+    if (wsConnection.status == WsConnection::Status::CLOSING) {
+      CCAPI_LOGGER_WARN("websocket connection is already in the state of closing");
+      return;
+    }
+    wsConnection.status = WsConnection::Status::CLOSING;
+    wsConnection._socket->socket_close();
     CCAPI_LOGGER_FUNCTION_EXIT;
   }
   virtual void prepareConnect(std::shared_ptr<WsConnection> wsConnectionPtr) { this->connect(wsConnectionPtr); }
@@ -1353,18 +1360,15 @@ class Service : public std::enable_shared_from_this<Service> {
     std::string url = wsConnection.getUrl();
     CCAPI_LOGGER_DEBUG("url = " + url);
     wsConnection._socket->set_connect_callback(std::bind(&Service::onOpen, shared_from_this(), wsConnectionPtr));
+    wsConnection._socket->set_close_callback(std::bind(&Service::onClose, shared_from_this(), wsConnectionPtr));
+    wsConnection._socket->set_close_callback(std::bind(&Service::onFail, shared_from_this(), wsConnectionPtr));
     wsConnection._socket->set_receive_callback(std::bind(&Service::onMessage, shared_from_this(), wsConnectionPtr, std::placeholders::_1));
     if (wsConnection._socket->connect(url)) {
       CCAPI_LOGGER_TRACE("unable to open epoll ws connection");
-      // this->onFail(wsConnectionPtr);
-      // return;
     } else {
       CCAPI_LOGGER_TRACE("epoll ws connection opened successfully");
       this->wsConnectionByIdMap.insert(std::make_pair(wsConnectionPtr->id, wsConnectionPtr));
     }
-    // if (this->sessionOptions.enableCheckPingPongWebsocketProtocolLevel) {
-    //   con->set_pong_handler(std::bind(&Service::onPong, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
-    // }
     CCAPI_LOGGER_FUNCTION_EXIT;
   }
   virtual void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) {
@@ -1377,10 +1381,51 @@ class Service : public std::enable_shared_from_this<Service> {
     this->connectNumRetryOnFailByConnectionUrlMap[urlBase] = 0;
     std::vector<std::string> correlationIdList = wsConnection.correlationIdList;
     CCAPI_LOGGER_DEBUG("correlationIdList = " + toString(correlationIdList));
+    if (this->enableCheckPingPongWebsocketApplicationLevel) {
+      this->setPingPongTimer(PingPongMethod::WEBSOCKET_APPLICATION_LEVEL, wsConnectionPtr,
+                             [wsConnectionPtr, that = shared_from_this()](ErrorCode& ec) { that->pingOnApplicationLevel(wsConnectionPtr, ec); });
+    }
   }
-  virtual void onFail_(std::shared_ptr<WsConnection> wsConnectionPtr) { CCAPI_LOGGER_INFO("about to set timer for unknown"); }
+  virtual void onFail_(std::shared_ptr<WsConnection> wsConnectionPtr) {
+    CCAPI_LOGGER_FUNCTION_ENTER;
+    WsConnection& wsConnection = *wsConnectionPtr;
+    wsConnection.status = WsConnection::Status::FAILED;
+    this->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::SUBSCRIPTION_FAILURE, "connection " + toString(wsConnection) + " has failed before opening");
+    WsConnection thisWsConnection = wsConnection;
+    this->wsConnectionByIdMap.erase(thisWsConnection.id);
+    auto urlBase = UtilString::split(thisWsConnection.getUrl(), "?").at(0);
+    long seconds = std::round(UtilAlgorithm::exponentialBackoff(1, 1, 2, std::min(this->connectNumRetryOnFailByConnectionUrlMap[urlBase], 6)));
+    CCAPI_LOGGER_INFO("about to set timer for " + toString(seconds) + " seconds");
+    if (this->connectRetryOnFailTimerByConnectionIdMap.find(thisWsConnection.id) != this->connectRetryOnFailTimerByConnectionIdMap.end()) {
+      this->connectRetryOnFailTimerByConnectionIdMap.at(thisWsConnection.id)->cancel();
+    }
+    TimerPtr timerPtr(new boost::asio::steady_timer(*this->serviceContextPtr->ioContextPtr, std::chrono::milliseconds(seconds * 1000)));
+    timerPtr->async_wait([wsConnectionPtr, that = shared_from_this(), urlBase](ErrorCode const& ec) {
+      WsConnection& thisWsConnection = *wsConnectionPtr;
+      if (that->wsConnectionByIdMap.find(thisWsConnection.id) == that->wsConnectionByIdMap.end()) {
+        if (ec) {
+          CCAPI_LOGGER_ERROR("wsConnection = " + toString(thisWsConnection) + ", connect retry on fail timer error: " + ec.message());
+          that->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::GENERIC_ERROR, ec, "timer");
+        } else {
+          CCAPI_LOGGER_INFO("about to retry");
+          try {
+            that->prepareConnect(wsConnectionPtr);
+            that->connectNumRetryOnFailByConnectionUrlMap[urlBase] += 1;
+          } catch (const beast::error_code& ec) {
+            CCAPI_LOGGER_TRACE("fail");
+            that->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::SUBSCRIPTION_FAILURE, ec, "create stream", wsConnectionPtr->correlationIdList);
+            return;
+          }
+        }
+      }
+    });
+    this->connectRetryOnFailTimerByConnectionIdMap[thisWsConnection.id] = timerPtr;
+    CCAPI_LOGGER_FUNCTION_EXIT;
+  }
   virtual void onFail(std::shared_ptr<WsConnection> wsConnectionPtr) {
     CCAPI_LOGGER_FUNCTION_ENTER;
+    this->clearStates(wsConnectionPtr);
+    this->onFail_(wsConnectionPtr);
     CCAPI_LOGGER_FUNCTION_EXIT;
   }
   void onMessage(std::shared_ptr<WsConnection> wsConnectionPtr, std::string textMessage) {
@@ -1399,20 +1444,21 @@ class Service : public std::enable_shared_from_this<Service> {
       this->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::GENERIC_ERROR, e);
     }
   }
-  void onControlCallback(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::websocket::frame_type kind, boost::beast::string_view payload) {
-    CCAPI_LOGGER_FUNCTION_ENTER;
-    CCAPI_LOGGER_FUNCTION_EXIT;
-  }
   void onPong(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view payload) {
     CCAPI_LOGGER_FUNCTION_ENTER;
+    auto now = UtilTime::now();
+    this->onPongByMethod(PingPongMethod::WEBSOCKET_PROTOCOL_LEVEL, wsConnectionPtr, now);
     CCAPI_LOGGER_FUNCTION_EXIT;
   }
   void onPongByMethod(PingPongMethod method, std::shared_ptr<WsConnection> wsConnectionPtr, const TimePoint& timeReceived) {
     CCAPI_LOGGER_FUNCTION_ENTER;
+    CCAPI_LOGGER_TRACE(pingPongMethodToString(method) + ": received a pong from " + toString(*wsConnectionPtr));
+    this->lastPongTpByMethodByConnectionIdMap[wsConnectionPtr->id][method] = timeReceived;
     CCAPI_LOGGER_FUNCTION_EXIT;
   }
   void onPing(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view payload) {
     CCAPI_LOGGER_FUNCTION_ENTER;
+    CCAPI_LOGGER_TRACE("received a ping from " + toString(*wsConnectionPtr));
     CCAPI_LOGGER_FUNCTION_EXIT;
   }
   void send(std::shared_ptr<WsConnection> wsConnectionPtr, std::string payload) {
@@ -1420,23 +1466,151 @@ class Service : public std::enable_shared_from_this<Service> {
     wsConnection._socket->send(payload);
   }
   void ping(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view payload, ErrorCode& ec) {
-    CCAPI_LOGGER_FUNCTION_ENTER;
-    CCAPI_LOGGER_FUNCTION_EXIT;
+    if (!this->wsConnectionPendingPingingByIdMap[wsConnectionPtr->id]) {
+      auto& stream = *wsConnectionPtr->streamPtr;
+      stream.async_ping("", [that = this, wsConnectionPtr](ErrorCode const& ec) { that->wsConnectionPendingPingingByIdMap[wsConnectionPtr->id] = false; });
+      this->wsConnectionPendingPingingByIdMap[wsConnectionPtr->id] = true;
+    }
   }
-  virtual void pingOnApplicationLevel(std::shared_ptr<WsConnection> wsConnectionPtr, ErrorCode& ec) {
-    CCAPI_LOGGER_FUNCTION_ENTER;
-    CCAPI_LOGGER_FUNCTION_EXIT;
-  }
+  virtual void pingOnApplicationLevel(std::shared_ptr<WsConnection> wsConnectionPtr, ErrorCode& ec) {}
   void setPingPongTimer(PingPongMethod method, std::shared_ptr<WsConnection> wsConnectionPtr, std::function<void(ErrorCode&)> pingMethod) {
     CCAPI_LOGGER_FUNCTION_ENTER;
+    CCAPI_LOGGER_TRACE("method = " + pingPongMethodToString(method));
+    auto pingIntervalMilliSeconds = this->pingIntervalMilliSecondsByMethodMap[method];
+    auto pongTimeoutMilliSeconds = this->pongTimeoutMilliSecondsByMethodMap[method];
+    CCAPI_LOGGER_TRACE("pingIntervalMilliSeconds = " + toString(pingIntervalMilliSeconds));
+    CCAPI_LOGGER_TRACE("pongTimeoutMilliSeconds = " + toString(pongTimeoutMilliSeconds));
+    if (pingIntervalMilliSeconds <= pongTimeoutMilliSeconds) {
+      return;
+    }
+    WsConnection& wsConnection = *wsConnectionPtr;
+    if (wsConnection.status == WsConnection::Status::OPEN) {
+      if (this->pingTimerByMethodByConnectionIdMap.find(wsConnection.id) != this->pingTimerByMethodByConnectionIdMap.end() &&
+          this->pingTimerByMethodByConnectionIdMap.at(wsConnection.id).find(method) != this->pingTimerByMethodByConnectionIdMap.at(wsConnection.id).end()) {
+        this->pingTimerByMethodByConnectionIdMap.at(wsConnection.id).at(method)->cancel();
+      }
+      TimerPtr timerPtr(
+          new boost::asio::steady_timer(*this->serviceContextPtr->ioContextPtr, std::chrono::milliseconds(pingIntervalMilliSeconds - pongTimeoutMilliSeconds)));
+      timerPtr->async_wait([wsConnectionPtr, that = shared_from_this(), pingMethod, pongTimeoutMilliSeconds, method](ErrorCode const& ec) {
+        WsConnection& wsConnection = *wsConnectionPtr;
+        if (that->wsConnectionByIdMap.find(wsConnection.id) != that->wsConnectionByIdMap.end()) {
+          if (ec) {
+            CCAPI_LOGGER_ERROR("wsConnection = " + toString(wsConnection) + ", ping timer error: " + ec.message());
+            that->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::GENERIC_ERROR, ec, "timer");
+          } else {
+            if (that->wsConnectionByIdMap.at(wsConnection.id)->status == WsConnection::Status::OPEN) {
+              ErrorCode ec;
+              pingMethod(ec);
+              if (ec) {
+                that->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::GENERIC_ERROR, ec, "ping");
+              }
+              if (pongTimeoutMilliSeconds <= 0) {
+                return;
+              }
+              if (that->pongTimeOutTimerByMethodByConnectionIdMap.find(wsConnection.id) != that->pongTimeOutTimerByMethodByConnectionIdMap.end() &&
+                  that->pongTimeOutTimerByMethodByConnectionIdMap.at(wsConnection.id).find(method) !=
+                      that->pongTimeOutTimerByMethodByConnectionIdMap.at(wsConnection.id).end()) {
+                that->pongTimeOutTimerByMethodByConnectionIdMap.at(wsConnection.id).at(method)->cancel();
+              }
+              TimerPtr timerPtr(new boost::asio::steady_timer(*that->serviceContextPtr->ioContextPtr, std::chrono::milliseconds(pongTimeoutMilliSeconds)));
+              timerPtr->async_wait([wsConnectionPtr, that, pingMethod, pongTimeoutMilliSeconds, method](ErrorCode const& ec) {
+                WsConnection& wsConnection = *wsConnectionPtr;
+                if (that->wsConnectionByIdMap.find(wsConnection.id) != that->wsConnectionByIdMap.end()) {
+                  if (ec) {
+                    CCAPI_LOGGER_ERROR("wsConnection = " + toString(wsConnection) + ", pong time out timer error: " + ec.message());
+                    that->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::GENERIC_ERROR, ec, "timer");
+                  } else {
+                    if (that->wsConnectionByIdMap.at(wsConnection.id)->status == WsConnection::Status::OPEN) {
+                      auto now = UtilTime::now();
+                      if (that->lastPongTpByMethodByConnectionIdMap.find(wsConnection.id) != that->lastPongTpByMethodByConnectionIdMap.end() &&
+                          that->lastPongTpByMethodByConnectionIdMap.at(wsConnection.id).find(method) !=
+                              that->lastPongTpByMethodByConnectionIdMap.at(wsConnection.id).end() &&
+                          std::chrono::duration_cast<std::chrono::milliseconds>(now - that->lastPongTpByMethodByConnectionIdMap.at(wsConnection.id).at(method))
+                                  .count() >= pongTimeoutMilliSeconds) {
+                        auto thisWsConnectionPtr = wsConnectionPtr;
+                        ErrorCode ec;
+                        that->close(thisWsConnectionPtr, beast::websocket::close_code::normal,
+                                    beast::websocket::close_reason(beast::websocket::close_code::normal, "pong timeout"), ec);
+                        if (ec) {
+                          that->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::GENERIC_ERROR, ec, "shutdown");
+                        }
+                        that->shouldProcessRemainingMessageOnClosingByConnectionIdMap[thisWsConnectionPtr->id] = true;
+                      } else {
+                        auto thisWsConnectionPtr = wsConnectionPtr;
+                        that->setPingPongTimer(method, thisWsConnectionPtr, pingMethod);
+                      }
+                    }
+                  }
+                }
+              });
+              that->pongTimeOutTimerByMethodByConnectionIdMap[wsConnection.id][method] = timerPtr;
+            }
+          }
+        }
+      });
+      this->pingTimerByMethodByConnectionIdMap[wsConnection.id][method] = timerPtr;
+    }
     CCAPI_LOGGER_FUNCTION_EXIT;
   }
   virtual void clearStates(std::shared_ptr<WsConnection> wsConnectionPtr) {
     CCAPI_LOGGER_FUNCTION_ENTER;
+    WsConnection& wsConnection = *wsConnectionPtr;
+    CCAPI_LOGGER_INFO("clear states for wsConnection " + toString(wsConnection));
+    this->shouldProcessRemainingMessageOnClosingByConnectionIdMap.erase(wsConnection.id);
+    this->lastPongTpByMethodByConnectionIdMap.erase(wsConnection.id);
+    this->extraPropertyByConnectionIdMap.erase(wsConnection.id);
+    if (this->pingTimerByMethodByConnectionIdMap.find(wsConnection.id) != this->pingTimerByMethodByConnectionIdMap.end()) {
+      for (const auto& x : this->pingTimerByMethodByConnectionIdMap.at(wsConnection.id)) {
+        x.second->cancel();
+      }
+      this->pingTimerByMethodByConnectionIdMap.erase(wsConnection.id);
+    }
+    if (this->pongTimeOutTimerByMethodByConnectionIdMap.find(wsConnection.id) != this->pongTimeOutTimerByMethodByConnectionIdMap.end()) {
+      for (const auto& x : this->pongTimeOutTimerByMethodByConnectionIdMap.at(wsConnection.id)) {
+        x.second->cancel();
+      }
+      this->pongTimeOutTimerByMethodByConnectionIdMap.erase(wsConnection.id);
+    }
+    auto urlBase = UtilString::split(wsConnection.getUrl(), "?").at(0);
+    this->connectNumRetryOnFailByConnectionUrlMap.erase(urlBase);
+    if (this->connectRetryOnFailTimerByConnectionIdMap.find(wsConnection.id) != this->connectRetryOnFailTimerByConnectionIdMap.end()) {
+      this->connectRetryOnFailTimerByConnectionIdMap.at(wsConnection.id)->cancel();
+      this->connectRetryOnFailTimerByConnectionIdMap.erase(wsConnection.id);
+    }
+    this->readMessageBufferByConnectionIdMap.erase(wsConnection.id);
+    this->writeMessageBufferByConnectionIdMap.erase(wsConnection.id);
+    this->writeMessageBufferWrittenLengthByConnectionIdMap.erase(wsConnection.id);
     CCAPI_LOGGER_FUNCTION_EXIT;
   }
-  virtual void onClose(std::shared_ptr<WsConnection> wsConnectionPtr, ErrorCode ec) {
+  virtual void onClose(std::shared_ptr<WsConnection> wsConnectionPtr) {
     CCAPI_LOGGER_FUNCTION_ENTER;
+    auto now = UtilTime::now();
+    WsConnection& wsConnection = *wsConnectionPtr;
+    wsConnection.status = WsConnection::Status::CLOSED;
+    CCAPI_LOGGER_INFO("connection " + toString(wsConnection) + " is closed");
+    Event event;
+    event.setType(Event::Type::SESSION_STATUS);
+    Message message;
+    message.setTimeReceived(now);
+    message.setType(Message::Type::SESSION_CONNECTION_DOWN);
+    Element element;
+    element.insert(CCAPI_CONNECTION_ID, wsConnection.id);
+    element.insert(CCAPI_CONNECTION_URL, wsConnection.getUrl());
+    message.setElementList({element});
+    std::vector<std::string> correlationIdList;
+    for (const auto& subscription : wsConnection.subscriptionList) {
+      correlationIdList.push_back(subscription.getCorrelationId());
+    }
+    CCAPI_LOGGER_DEBUG("correlationIdList = " + toString(correlationIdList));
+    message.setCorrelationIdList(correlationIdList);
+    event.setMessageList({message});
+    this->eventHandler(event, nullptr);
+    CCAPI_LOGGER_INFO("connection " + toString(wsConnection) + " is closed");
+    this->clearStates(wsConnectionPtr);
+    this->wsConnectionByIdMap.erase(wsConnectionPtr->id);
+    if (this->shouldContinue.load()) {
+      this->prepareConnect(wsConnectionPtr);
+    }
     CCAPI_LOGGER_FUNCTION_EXIT;
   }
   virtual void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view textMessage, const TimePoint& timeReceived) {}

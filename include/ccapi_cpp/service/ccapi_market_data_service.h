@@ -658,14 +658,62 @@ class MarketDataService : public Service {
   }
   void onFail_(std::shared_ptr<WsConnection> wsConnectionPtr) override {
     CCAPI_LOGGER_FUNCTION_ENTER;
+    WsConnection& wsConnection = *wsConnectionPtr;
+    WsConnection thisWsConnection = wsConnection;
+    Service::onFail_(wsConnectionPtr);
+    this->instrumentGroupByWsConnectionIdMap.erase(thisWsConnection.id);
     CCAPI_LOGGER_FUNCTION_EXIT;
   }
   void clearStates(std::shared_ptr<WsConnection> wsConnectionPtr) override {
     CCAPI_LOGGER_FUNCTION_ENTER;
+    WsConnection& wsConnection = *wsConnectionPtr;
+    Service::clearStates(wsConnectionPtr);
+    this->fieldByConnectionIdChannelIdSymbolIdMap.erase(wsConnection.id);
+    this->optionMapByConnectionIdChannelIdSymbolIdMap.erase(wsConnection.id);
+    this->marketDepthSubscribedToExchangeByConnectionIdChannelIdSymbolIdMap.erase(wsConnection.id);
+    this->subscriptionListByConnectionIdChannelIdSymbolIdMap.erase(wsConnection.id);
+    this->correlationIdListByConnectionIdChannelIdSymbolIdMap.erase(wsConnection.id);
+    this->channelIdSymbolIdByConnectionIdExchangeSubscriptionIdMap.erase(wsConnection.id);
+    this->snapshotBidByConnectionIdChannelIdSymbolIdMap.erase(wsConnection.id);
+    this->snapshotAskByConnectionIdChannelIdSymbolIdMap.erase(wsConnection.id);
+    this->previousConflateSnapshotBidByConnectionIdChannelIdSymbolIdMap.erase(wsConnection.id);
+    this->previousConflateSnapshotAskByConnectionIdChannelIdSymbolIdMap.erase(wsConnection.id);
+    this->processedInitialSnapshotByConnectionIdChannelIdSymbolIdMap.erase(wsConnection.id);
+    this->processedInitialTradeByConnectionIdChannelIdSymbolIdMap.erase(wsConnection.id);
+    this->l2UpdateIsReplaceByConnectionIdChannelIdSymbolIdMap.erase(wsConnection.id);
+    this->previousConflateTimeMapByConnectionIdChannelIdSymbolIdMap.erase(wsConnection.id);
+    if (this->conflateTimerMapByConnectionIdChannelIdSymbolIdMap.find(wsConnection.id) != this->conflateTimerMapByConnectionIdChannelIdSymbolIdMap.end()) {
+      for (const auto& x : this->conflateTimerMapByConnectionIdChannelIdSymbolIdMap.at(wsConnection.id)) {
+        for (const auto& y : x.second) {
+          y.second->cancel();
+        }
+      }
+      this->conflateTimerMapByConnectionIdChannelIdSymbolIdMap.erase(wsConnection.id);
+    }
+    this->openByConnectionIdChannelIdSymbolIdMap.erase(wsConnection.id);
+    this->highByConnectionIdChannelIdSymbolIdMap.erase(wsConnection.id);
+    this->lowByConnectionIdChannelIdSymbolIdMap.erase(wsConnection.id);
+    this->closeByConnectionIdChannelIdSymbolIdMap.erase(wsConnection.id);
+    this->orderBookChecksumByConnectionIdSymbolIdMap.erase(wsConnection.id);
+    this->marketDataMessageDataBufferByConnectionIdExchangeSubscriptionIdVersionIdMap.erase(wsConnection.id);
+    if (this->fetchMarketDepthInitialSnapshotTimerByConnectionIdExchangeSubscriptionIdMap.find(wsConnection.id) !=
+        this->fetchMarketDepthInitialSnapshotTimerByConnectionIdExchangeSubscriptionIdMap.end()) {
+      for (const auto& x : this->fetchMarketDepthInitialSnapshotTimerByConnectionIdExchangeSubscriptionIdMap.at(wsConnection.id)) {
+        x.second->cancel();
+      }
+      this->fetchMarketDepthInitialSnapshotTimerByConnectionIdExchangeSubscriptionIdMap.erase(wsConnection.id);
+    }
+    this->orderbookVersionIdByConnectionIdExchangeSubscriptionIdMap.erase(wsConnection.id);
     CCAPI_LOGGER_FUNCTION_EXIT;
   }
-  virtual void onClose(std::shared_ptr<WsConnection> wsConnectionPtr, ErrorCode ec) override {
+  virtual void onClose(std::shared_ptr<WsConnection> wsConnectionPtr) override {
     CCAPI_LOGGER_FUNCTION_ENTER;
+    WsConnection& wsConnection = *wsConnectionPtr;
+    this->exchangeSubscriptionIdListByExchangeJsonPayloadIdByConnectionIdMap.erase(wsConnection.id);
+    this->exchangeJsonPayloadIdByConnectionIdMap.erase(wsConnection.id);
+    this->instrumentGroupByWsConnectionIdMap.erase(wsConnection.id);
+    this->correlationIdByConnectionIdMap.erase(wsConnection.id);
+    Service::onClose(wsConnectionPtr);
     CCAPI_LOGGER_FUNCTION_EXIT;
   }
   virtual void subscribeToExchange(std::shared_ptr<WsConnection> wsConnectionPtr) {
