@@ -8,7 +8,7 @@ class ExecutionManagementServiceBybitBase : public ExecutionManagementService {
  public:
   ExecutionManagementServiceBybitBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                       ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
-      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr,io) {}
+      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {}
   virtual ~ExecutionManagementServiceBybitBase() {}
 #ifndef CCAPI_EXPOSE_INTERNAL
 

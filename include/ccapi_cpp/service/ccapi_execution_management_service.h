@@ -68,7 +68,7 @@ class ExecutionManagementService : public Service {
                                   return;
                                 }
 #ifdef ENABLE_EPOLL_WS_CLIENT
-                                std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(that->baseUrlWs, "", {subscription}, credential, streamPtr, that->_io, ++(that->_ws_id)));
+                                std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(that->baseUrlWs, "", {subscription}, credential, that->_io, ++(that->_ws_id)));
 #else
                                 std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(that->baseUrlWs, "", {subscription}, credential, streamPtr));
 #endif

@@ -1,7 +1,7 @@
 #ifndef INCLUDE_CCAPI_CPP_SERVICE_CCAPI_SERVICE_H_
 #define INCLUDE_CCAPI_CPP_SERVICE_CCAPI_SERVICE_H_
 #include "ccapi_cpp/ccapi_logger.h"
-#ifdef ENABLE_EPOLL_HTTPS_CLIENT
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
 #include "https_client.h"
 #include "io_handler.h"
 #endif
@@ -119,7 +119,11 @@ class Service : public std::enable_shared_from_this<Service> {
   }
   Service(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
           ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
-      : eventHandler(eventHandler),
+      :
+#ifdef ENABLE_EPOLL_WS_CLIENT
+        _io(io),
+#endif
+        eventHandler(eventHandler),
         sessionOptions(sessionOptions),
         sessionConfigs(sessionConfigs),
         serviceContextPtr(serviceContextPtr),
@@ -254,6 +258,48 @@ class Service : public std::enable_shared_from_this<Service> {
       }
     }
   }
+  void retryHttpRequest() {
+    if (!failedRequestRetryQueue.empty()) {
+      Request& _request = std::get<0>(failedRequestRetryQueue.front());
+      Queue<Event>* _eventQueuePtr = std::get<1>(failedRequestRetryQueue.front());
+      HttpRetry& _retry = std::get<2>(failedRequestRetryQueue.front());
+      _retry.numRetry += 1;
+      if (_retry.numRetry <= this->sessionOptions.httpMaxNumRetry && _retry.numRedirect <= this->sessionOptions.httpMaxNumRedirect) {
+        createNewHttpSession(_io, false);
+        http::request<http::string_body> req;
+        TimePoint then = UtilTime::now();
+        req = this->convertRequest(_request, then);
+        const auto& headers = req.base();
+        for (const auto& header : headers) {
+          CCAPI_LOGGER_DEBUG("Header Name: " + header.name_string().to_string() + " Value: " + header.value().to_string());
+          _header[header.name_string().to_string()] = header.value().to_string();
+        }
+        req_method = req.base().method_string().to_string();
+        req_target = req.target().to_string();
+
+        CCAPI_LOGGER_DEBUG("Sending new request | Type: " + _request.getCorrelationId());
+        if (!_https_session->send(std::bind(&ccapi::Service::prepareOnRead_2Response, this, std::placeholders::_1, _request, _eventQueuePtr), req_method,
+                                  req_target, "", _header)) {
+          CCAPI_LOGGER_ERROR("Request sending failed, retry request");
+          retryHttpRequest();
+        } else {
+          CCAPI_LOGGER_INFO("Request sent successfully");
+        }
+      } else {
+        std::string errorMessage = _retry.numRetry > this->sessionOptions.httpMaxNumRetry ? "max retry exceeded" : "max redirect exceeded";
+        CCAPI_LOGGER_ERROR(errorMessage);
+        CCAPI_LOGGER_DEBUG("retry = " + toString(_retry));
+        this->onError(Event::Type::REQUEST_STATUS, Message::Type::REQUEST_FAILURE, std::runtime_error(errorMessage), {_request.getCorrelationId()},
+                      _eventQueuePtr);
+        if (_retry.promisePtr) {
+          _retry.promisePtr->set_value();
+        }
+        failedRequestRetryQueue.pop();
+      }
+    } else {
+      CCAPI_LOGGER_ERROR("Failed request queue is empty | cannot retry request");
+    }
+  }
 #endif
 #if defined TRACEPOINTS || defined ORDER_ENTRY_TRACEPOINTS
   void set_timer_reference(rakurai::utils::timer* timer) { _mytimer = timer; }
@@ -265,6 +311,8 @@ class Service : public std::enable_shared_from_this<Service> {
   std::shared_ptr<std::future<void>> sendRequest(Request& request, const bool useFuture, const TimePoint& now, long delayMilliSeconds,
                                                  Queue<Event>* eventQueuePtr) {
 #ifdef ENABLE_EPOLL_HTTPS_CLIENT
+    HttpRetry retry(0, 0, "", nullptr);
+    failedRequestRetryQueue.push(std::make_tuple(std::ref(request), eventQueuePtr, std::ref(retry)));
     http::request<http::string_body> req;
     TimePoint then;
     if (delayMilliSeconds > 0) {
@@ -291,10 +339,16 @@ class Service : public std::enable_shared_from_this<Service> {
       }
     } else {
       CCAPI_LOGGER_DEBUG("Sending new request | Type: " + request.getCorrelationId());
-      _https_session->send(std::bind(&ccapi::Service::prepareOnRead_2Response, this, std::placeholders::_1, request, eventQueuePtr), req_method, req_target, "",
-                           _header);
+      if (!_https_session->send(std::bind(&ccapi::Service::prepareOnRead_2Response, this, std::placeholders::_1, request, eventQueuePtr), req_method,
+                                req_target, "", _header)) {
+        CCAPI_LOGGER_ERROR("Request sending failed, retry request");
+        retryHttpRequest();
+      } else {
+        CCAPI_LOGGER_INFO("Request sent successfully");
+      }
     }
-    return nullptr;
+    std::shared_ptr<std::future<void>> futurePtr(nullptr);
+    return futurePtr;
 #else
     CCAPI_LOGGER_FUNCTION_ENTER;
     CCAPI_LOGGER_DEBUG("request = " + toString(request));
@@ -1466,11 +1520,11 @@ class Service : public std::enable_shared_from_this<Service> {
     wsConnection._socket->send(payload);
   }
   void ping(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view payload, ErrorCode& ec) {
-    if (!this->wsConnectionPendingPingingByIdMap[wsConnectionPtr->id]) {
-      auto& stream = *wsConnectionPtr->streamPtr;
-      stream.async_ping("", [that = this, wsConnectionPtr](ErrorCode const& ec) { that->wsConnectionPendingPingingByIdMap[wsConnectionPtr->id] = false; });
-      this->wsConnectionPendingPingingByIdMap[wsConnectionPtr->id] = true;
-    }
+    // if (!this->wsConnectionPendingPingingByIdMap[wsConnectionPtr->id]) {
+    //   auto& stream = *wsConnectionPtr->streamPtr;
+    //   stream.async_ping("", [that = this, wsConnectionPtr](ErrorCode const& ec) { that->wsConnectionPendingPingingByIdMap[wsConnectionPtr->id] = false; });
+    //   this->wsConnectionPendingPingingByIdMap[wsConnectionPtr->id] = true;
+    // }
   }
   virtual void pingOnApplicationLevel(std::shared_ptr<WsConnection> wsConnectionPtr, ErrorCode& ec) {}
   void setPingPongTimer(PingPongMethod method, std::shared_ptr<WsConnection> wsConnectionPtr, std::function<void(ErrorCode&)> pingMethod) {
@@ -2138,13 +2192,15 @@ class Service : public std::enable_shared_from_this<Service> {
   }
   virtual void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view textMessage, const TimePoint& timeReceived) {}
 #endif
-#ifdef ENABLE_EPOLL_HTTPS_CLIENT
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
+  emumba::connector::io_handler& _io;
   std::shared_ptr<emumba::connector::https::client> _https_session;
   std::shared_ptr<emumba::connector::https::client> _dummy_https_session;
   bool is_dummy_connection_established = false;
   std::map<std::string, std::string> _header;
   std::string req_method = "";
   std::string req_target = "";
+  std::queue<std::tuple<Request&, Queue<Event>*, HttpRetry&>> failedRequestRetryQueue;
 #endif
 #if defined TRACEPOINTS || defined ORDER_ENTRY_TRACEPOINTS
   rakurai::utils::timer* _mytimer;

@@ -8,7 +8,7 @@ class ExecutionManagementServiceFtxBase : public ExecutionManagementService {
  public:
   ExecutionManagementServiceFtxBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                     ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
-      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr,io) {
+      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
     this->createOrderTarget = "/api/orders";
     this->cancelOrderTarget = "/api/orders";
     this->getOrderTarget = "/api/orders";

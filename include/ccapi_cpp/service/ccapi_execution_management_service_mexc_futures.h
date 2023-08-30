@@ -8,7 +8,7 @@ class ExecutionManagementServiceMexcFutures : public ExecutionManagementService 
  public:
   ExecutionManagementServiceMexcFutures(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                         ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
-      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr,io) {
+      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_MEXC_FUTURES;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/ws";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);

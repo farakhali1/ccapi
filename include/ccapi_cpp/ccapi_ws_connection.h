@@ -92,12 +92,11 @@ namespace ccapi {
 class WsConnection CCAPI_FINAL {
  public:
   WsConnection(std::string url, std::string group, std::vector<Subscription> subscriptionList, std::map<std::string, std::string> credential,
-               std::shared_ptr<beast::websocket::stream<beast::ssl_stream<beast::tcp_stream> > > streamPtr, emumba::connector::io_handler& io, uint id)
+               emumba::connector::io_handler& io, uint id)
       : url(url),
         group(group),
         subscriptionList(subscriptionList),
         credential(credential),
-        streamPtr(streamPtr),
         _socket(std::make_unique<emumba::connector::websocket::client>(io, ++_ws_id)),
         _rate_limit_timer(io),
         _ws_id(id) {
@@ -195,9 +194,6 @@ class WsConnection CCAPI_FINAL {
   Status status{Status::UNKNOWN};
   std::map<std::string, std::string> headers;
   std::map<std::string, std::string> credential;
-  std::shared_ptr<beast::websocket::stream<beast::ssl_stream<beast::tcp_stream> > > streamPtr;
-  beast::websocket::close_code remoteCloseCode;
-  beast::websocket::close_reason remoteCloseReason;
   std::shared_ptr<emumba::connector::websocket::client> _socket;
   emumba::connector::epoll_timer _rate_limit_timer;
   uint _ws_id;

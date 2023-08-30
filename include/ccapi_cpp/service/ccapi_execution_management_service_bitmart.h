@@ -8,7 +8,7 @@ class ExecutionManagementServiceBitmart : public ExecutionManagementService {
  public:
   ExecutionManagementServiceBitmart(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                     ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
-      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr,io) {
+      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_BITMART;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/user?protocol=1.1";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);

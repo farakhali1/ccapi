@@ -142,8 +142,13 @@ class MarketDataService : public Service {
               that->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::SUBSCRIPTION_FAILURE, ec, "create stream", correlationIdList);
               return;
             }
+#ifdef ENABLE_EPOLL_WS_CLIENT
+            std::shared_ptr<WsConnection> wsConnectionPtr(
+                new WsConnection(url, instrumentGroup, subscriptionListGivenInstrumentGroup, credential, that->_io, ++(that->_ws_id)));
+#else
             std::shared_ptr<WsConnection> wsConnectionPtr(
                 new WsConnection(url, instrumentGroup, subscriptionListGivenInstrumentGroup, credential, streamPtr, that->_io, ++(that->_ws_id)));
+#endif
             CCAPI_LOGGER_WARN("about to subscribe with new wsConnectionPtr " + toString(*wsConnectionPtr));
             that->prepareConnect(wsConnectionPtr);
           }
