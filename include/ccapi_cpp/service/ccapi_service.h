@@ -189,6 +189,142 @@ class Service : public std::enable_shared_from_this<Service> {
     throw std::runtime_error(errorMessage);
   }
   virtual void subscribe(std::vector<Subscription>& subscriptionList) {}
+
+#ifdef BINACE_SPOT_ORDER_ENTRY_ON_WS
+  void prepareCreateNewOrderRequeestForWebsocket(Request& request) {
+    CCAPI_LOGGER_INFO("prepare new order requeest for websocket");
+    request.appendParam({
+        {"timestamp", std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count())},
+        {"recvWindow", "60000"},
+        {"symbol", request.getInstrument().c_str()},
+    });
+
+    std::map<std::string, std::string> sortedMap;
+
+    for (const auto& paramMap : request.getParamList()) {
+      for (const auto& pair : paramMap) {
+        sortedMap.insert(pair);
+      }
+    }
+    rapidjson::StringBuffer s;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(s);
+    writer.StartObject();
+    writer.Key("id");
+    writer.String(request.getCorrelationId().c_str());
+    writer.Key("method");
+    writer.String("order.place");
+    writer.Key("params");
+    writer.StartObject();
+    std::string api_secret = "";
+    for (const auto& pair : request.getCredential()) {
+      if (pair.first == "BINANCE_API_KEY") {
+        writer.Key("apiKey");
+        writer.String(pair.second.c_str());
+      } else {
+        api_secret = pair.second;
+      }
+    }
+    for (const auto& pair : sortedMap) {
+      writer.Key(pair.first.c_str());
+      writer.String(pair.second.c_str());
+    }
+    writer.Key("signature");
+    writer.String(api_secret.c_str());
+    writer.EndObject();
+    writer.EndObject();
+
+    rj::Document new_order_json;
+    new_order_json.Parse(s.GetString());
+    if (!new_order_json.HasParseError()) {
+      // query format
+      std::ostringstream query;
+      for (const auto& param : new_order_json["params"].GetObject()) {
+        if (param.name != "signature") {
+          query << (param.name.GetString()) << '=';
+          if (param.value.IsString()) {
+            query << (param.value.GetString());
+          } else if (param.value.IsInt64()) {
+            query << param.value.GetInt64();
+          }
+          query << '&';
+        }
+      }
+      // Remove the trailing '&' from the query string
+      std::string queryString = query.str();
+      if (!queryString.empty()) {
+        queryString.pop_back();
+      }
+      auto signature = Hmac::hmac(Hmac::ShaVersion::SHA256, api_secret.c_str(), queryString.c_str(), true);
+      queryString = queryString + "&signature=" + signature;
+      new_order_json["params"]["signature"].SetString(signature.c_str(), signature.length());
+
+      rapidjson::StringBuffer buffer1;
+      rapidjson::Writer<rapidjson::StringBuffer> writer1(buffer1);
+      new_order_json.Accept(writer1);
+      CCAPI_LOGGER_DEBUG("Sending binance spot new order request on websocket " + std::string(buffer1.GetString()));
+
+      _binance_spot_wsConnectionPtr->_socket->send(buffer1.GetString());
+    } else {
+      CCAPI_LOGGER_ERROR("Error parsing JSON.");
+    }
+  }
+  void onBinanceSpotOpen() {
+    CCAPI_LOGGER_FUNCTION_ENTER;
+    auto now = UtilTime::now();
+    _binance_spot_wsConnectionPtr->status = WsConnection::Status::OPEN;
+    CCAPI_LOGGER_INFO("connection established");
+  }
+  void onBinanceSpotMessage(std::string textMessage) {
+    auto now = UtilTime::now();
+    CCAPI_LOGGER_DEBUG("Received response on websocket: " + toString(textMessage));
+    rapidjson::Document response;
+    response.Parse(textMessage.c_str());
+    if (!response.HasParseError()) {
+      if (response["status"].GetInt() == 200) {
+        CCAPI_LOGGER_DEBUG("Response type is: " + toString(response["status"].GetInt()));
+
+        Request& _request = std::get<0>(wsRequestsQueue.front());
+        Queue<Event>* _eventQueuePtr = std::get<1>(wsRequestsQueue.front());
+
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        response["result"].Accept(writer);
+
+        std::string jsonStr = buffer.GetString();
+        prepareOnRead_2Response(jsonStr, _request, _eventQueuePtr);
+        // prepareOnRead_2Response(response["result"].GetObject(), _request, _eventQueuePtr);
+        wsRequestsQueue.pop();
+      }
+    } else {
+      CCAPI_LOGGER_ERROR("Error parsing JSON.");
+    }
+  }
+  void onBinanceSpotClose() {
+    CCAPI_LOGGER_FUNCTION_ENTER;
+    auto now = UtilTime::now();
+    _binance_spot_wsConnectionPtr->status = WsConnection::Status::CLOSED;
+    CCAPI_LOGGER_INFO("connection is closed");
+    Event event;
+    event.setType(Event::Type::SESSION_STATUS);
+    Message message;
+    message.setTimeReceived(now);
+    message.setType(Message::Type::SESSION_CONNECTION_DOWN);
+    Element element;
+    element.insert(CCAPI_CONNECTION_ID, _binance_spot_wsConnectionPtr->id);
+    element.insert(CCAPI_CONNECTION_URL, _binance_spot_wsConnectionPtr->getUrl());
+    message.setElementList({element});
+    std::vector<std::string> correlationIdList;
+    for (const auto& subscription : _binance_spot_wsConnectionPtr->subscriptionList) {
+      correlationIdList.push_back(subscription.getCorrelationId());
+    }
+    CCAPI_LOGGER_DEBUG("correlationIdList = " + toString(correlationIdList));
+    message.setCorrelationIdList(correlationIdList);
+    event.setMessageList({message});
+    this->eventHandler(event, nullptr);
+    CCAPI_LOGGER_INFO("connection is closed");
+  }
+#endif
+
 #ifdef ENABLE_EPOLL_HTTPS_CLIENT
   void prepareOnReadResponse(const std::string& response, http::request<http::string_body> req,
                              std::function<void(const http::response<http::string_body>&)> responseHandler,
@@ -227,7 +363,7 @@ class Service : public std::enable_shared_from_this<Service> {
       return;
     } else {
       CCAPI_LOGGER_INFO("Response received(OnRead_2), response: " + response);
-      CCAPI_LOGGER_INFO("Request: " + request.toString());
+      CCAPI_LOGGER_INFO("Request: " + request.getCorrelationId());
       this->processSuccessfulTextMessageRest(200, request, response, UtilTime::now(), eventQueuePtr);
     }
   }
@@ -256,6 +392,26 @@ class Service : public std::enable_shared_from_this<Service> {
         }
         is_dummy_connection_established = true;
       }
+#ifdef BINACE_SPOT_ORDER_ENTRY_ON_WS
+      std::vector<Subscription> subscriptionList;
+      std::map<std::string, std::string> credentials;
+      std::string url_spot = "wss://ws-api.binance.com:443/ws-api/v3";
+      _binance_spot_wsConnectionPtr =
+          std::make_shared<ccapi::WsConnection>(url_spot, "instrumentGroup" + _binance_spot_ws_id, subscriptionList, credentials, _io, ++_binance_spot_ws_id);
+      _binance_spot_wsConnectionPtr->status = WsConnection::Status::CONNECTING;
+      CCAPI_LOGGER_DEBUG("connection initialization on id " + _binance_spot_wsConnectionPtr->id);
+      std::string url = _binance_spot_wsConnectionPtr->getUrl();
+      CCAPI_LOGGER_DEBUG("url = " + url);
+      _binance_spot_wsConnectionPtr->_socket->set_connect_callback(std::bind(&Service::onBinanceSpotOpen, shared_from_this()));
+      _binance_spot_wsConnectionPtr->_socket->set_close_callback(std::bind(&Service::onBinanceSpotClose, shared_from_this()));
+      _binance_spot_wsConnectionPtr->_socket->set_receive_callback(std::bind(&Service::onBinanceSpotMessage, shared_from_this(), std::placeholders::_1));
+      if (_binance_spot_wsConnectionPtr->_socket->connect(url)) {
+        CCAPI_LOGGER_ERROR("unable to open epoll ws connection");
+      } else {
+        CCAPI_LOGGER_INFO("epoll ws connection opened successfully");
+      }
+      CCAPI_LOGGER_FUNCTION_EXIT;
+#endif
     }
   }
   void retryHttpRequest() {
@@ -311,44 +467,53 @@ class Service : public std::enable_shared_from_this<Service> {
   std::shared_ptr<std::future<void>> sendRequest(Request& request, const bool useFuture, const TimePoint& now, long delayMilliSeconds,
                                                  Queue<Event>* eventQueuePtr) {
 #ifdef ENABLE_EPOLL_HTTPS_CLIENT
-    HttpRetry retry(0, 0, "", nullptr);
-    failedRequestRetryQueue.push(std::make_tuple(std::ref(request), eventQueuePtr, std::ref(retry)));
-    http::request<http::string_body> req;
-    TimePoint then;
-    if (delayMilliSeconds > 0) {
-      then = now + std::chrono::milliseconds(delayMilliSeconds);
-    } else {
-      then = now;
-    }
-    req = this->convertRequest(request, then);
-    const auto& headers = req.base();
-    for (const auto& header : headers) {
-      CCAPI_LOGGER_DEBUG("Header Name: " + header.name_string().to_string() + " Value: " + header.value().to_string());
-      _header[header.name_string().to_string()] = header.value().to_string();
-    }
-    req_method = req.base().method_string().to_string();
-    req_target = req.target().to_string();
-    CCAPI_LOGGER_DEBUG("Sending new request Method: " + req_method + " Target: " + req_target);
-    if (request.getCorrelationId().find("TestOrder") != std::string::npos) {
-      if (is_dummy_connection_established) {
-        CCAPI_LOGGER_DEBUG("Sending new request | Type: " + request.getCorrelationId());
-        _dummy_https_session->send(std::bind(&ccapi::Service::prepareOnRead_2Response, this, std::placeholders::_1, request, eventQueuePtr), req_method,
-                                   req_target, "", _header);
+    // #ifdef
+    if (request.getOperation() == ccapi::Request::Operation::CREATE_ORDER) {
+      wsRequestsQueue.push(std::make_tuple(std::ref(request), eventQueuePtr));
+      CCAPI_LOGGER_INFO("Create New Order request received");
+      prepareCreateNewOrderRequeestForWebsocket(request);
+    } else {  // #else
+      HttpRetry retry(0, 0, "", nullptr);
+      failedRequestRetryQueue.push(std::make_tuple(std::ref(request), eventQueuePtr, std::ref(retry)));
+      http::request<http::string_body> req;
+      TimePoint then;
+      if (delayMilliSeconds > 0) {
+        then = now + std::chrono::milliseconds(delayMilliSeconds);
       } else {
-        CCAPI_LOGGER_ERROR("Dummy connection not established unable to send dummy request | Type: " + request.getCorrelationId());
+        then = now;
       }
-    } else {
-      CCAPI_LOGGER_DEBUG("Sending new request | Type: " + request.getCorrelationId());
-      if (!_https_session->send(std::bind(&ccapi::Service::prepareOnRead_2Response, this, std::placeholders::_1, request, eventQueuePtr), req_method,
-                                req_target, "", _header)) {
-        CCAPI_LOGGER_ERROR("Request sending failed, retry request");
-        retryHttpRequest();
+      req = this->convertRequest(request, then);
+      const auto& headers = req.base();
+      for (const auto& header : headers) {
+        CCAPI_LOGGER_DEBUG("Header Name: " + header.name_string().to_string() + " Value: " + header.value().to_string());
+        _header[header.name_string().to_string()] = header.value().to_string();
+      }
+      req_method = req.base().method_string().to_string();
+      req_target = req.target().to_string();
+      CCAPI_LOGGER_DEBUG("Sending new request Method: " + req_method + " Target: " + req_target);
+      if (request.getCorrelationId().find("TestOrder") != std::string::npos) {
+        if (is_dummy_connection_established) {
+          CCAPI_LOGGER_DEBUG("Sending new request | Type: " + request.getCorrelationId());
+          _dummy_https_session->send(std::bind(&ccapi::Service::prepareOnRead_2Response, this, std::placeholders::_1, request, eventQueuePtr), req_method,
+                                     req_target, "", _header);
+        } else {
+          CCAPI_LOGGER_ERROR("Dummy connection not established unable to send dummy request | Type: " + request.getCorrelationId());
+        }
       } else {
-        CCAPI_LOGGER_INFO("Request sent successfully");
+        CCAPI_LOGGER_DEBUG("Sending new request | Type: " + request.getCorrelationId());
+        if (!_https_session->send(std::bind(&ccapi::Service::prepareOnRead_2Response, this, std::placeholders::_1, request, eventQueuePtr), req_method,
+                                  req_target, "", _header)) {
+          CCAPI_LOGGER_ERROR("Request sending failed, retry request");
+          retryHttpRequest();
+        } else {
+          CCAPI_LOGGER_INFO("Request sent successfully");
+        }
       }
     }
     std::shared_ptr<std::future<void>> futurePtr(nullptr);
     return futurePtr;
+    // #endif
+
 #else
     CCAPI_LOGGER_FUNCTION_ENTER;
     CCAPI_LOGGER_DEBUG("request = " + toString(request));
@@ -1418,9 +1583,9 @@ class Service : public std::enable_shared_from_this<Service> {
     wsConnection._socket->set_close_callback(std::bind(&Service::onFail, shared_from_this(), wsConnectionPtr));
     wsConnection._socket->set_receive_callback(std::bind(&Service::onMessage, shared_from_this(), wsConnectionPtr, std::placeholders::_1));
     if (wsConnection._socket->connect(url)) {
-      CCAPI_LOGGER_TRACE("unable to open epoll ws connection");
+      CCAPI_LOGGER_ERROR("unable to open epoll ws connection");
     } else {
-      CCAPI_LOGGER_TRACE("epoll ws connection opened successfully");
+      CCAPI_LOGGER_INFO("epoll ws connection opened successfully");
       this->wsConnectionByIdMap.insert(std::make_pair(wsConnectionPtr->id, wsConnectionPtr));
     }
     CCAPI_LOGGER_FUNCTION_EXIT;
@@ -2193,6 +2358,10 @@ class Service : public std::enable_shared_from_this<Service> {
   virtual void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view textMessage, const TimePoint& timeReceived) {}
 #endif
 #if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
+#ifdef BINACE_SPOT_ORDER_ENTRY_ON_WS
+  uint _binance_spot_ws_id = 0;
+  std::shared_ptr<WsConnection> _binance_spot_wsConnectionPtr;
+#endif
   emumba::connector::io_handler& _io;
   std::shared_ptr<emumba::connector::https::client> _https_session;
   std::shared_ptr<emumba::connector::https::client> _dummy_https_session;
@@ -2201,6 +2370,7 @@ class Service : public std::enable_shared_from_this<Service> {
   std::string req_method = "";
   std::string req_target = "";
   std::queue<std::tuple<Request&, Queue<Event>*, HttpRetry&>> failedRequestRetryQueue;
+  std::queue<std::tuple<Request&, Queue<Event>*>> wsRequestsQueue;
 #endif
 #if defined TRACEPOINTS || defined ORDER_ENTRY_TRACEPOINTS
   rakurai::utils::timer* _mytimer;
