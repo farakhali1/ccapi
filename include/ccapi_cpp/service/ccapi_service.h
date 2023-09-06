@@ -273,7 +273,6 @@ class Service : public std::enable_shared_from_this<Service> {
       wsRequestsQueue.push(std::make_tuple(std::ref(request), eventQueuePtr));
       prepareNewOrderRequeestForWebsocket(request);
     } else {
-      dummyWsRequestsQueue.push(std::make_tuple(std::ref(request), eventQueuePtr));
       CCAPI_LOGGER_ERROR("Send new order on dummy Ws server.");
       rapidjson::StringBuffer str_buff;
       rapidjson::Writer<rapidjson::StringBuffer> writer(str_buff);
@@ -396,14 +395,6 @@ class Service : public std::enable_shared_from_this<Service> {
         }
       } else {
         CCAPI_LOGGER_DEBUG("Dummy order response received: " + textMessage);
-        // Request& _request = std::get<0>(dummyWsRequestsQueue.front());
-        // Queue<Event>* _eventQueuePtr = std::get<1>(dummyWsRequestsQueue.front());
-        // rapidjson::StringBuffer buffer;
-        // rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-        // response["result"].Accept(writer);
-        // std::string jsonStr = buffer.GetString();
-        // prepareOnRead_2Response(jsonStr, _request, _eventQueuePtr);
-        dummyWsRequestsQueue.pop();
       }
     } else {
       CCAPI_LOGGER_ERROR("Error parsing JSON.");
@@ -433,7 +424,7 @@ class Service : public std::enable_shared_from_this<Service> {
     this->eventHandler(event, nullptr);
     if (_wsConnectionPtr->_socket->socket_reconnect(ws_env_var) == false) {
       sleep(1);
-      CCAPI_LOGGER_INFO("WS rconnection failed");
+      CCAPI_LOGGER_INFO("WS reconnection failed");
       onBinanceSpotClose(_wsConnectionPtr);
     }
   }
@@ -1726,7 +1717,6 @@ class Service : public std::enable_shared_from_this<Service> {
     CCAPI_LOGGER_DEBUG("url = " + url);
     wsConnection._socket->set_connect_callback(std::bind(&Service::onOpen, shared_from_this(), wsConnectionPtr));
     wsConnection._socket->set_close_callback(std::bind(&Service::onClose, shared_from_this(), wsConnectionPtr));
-    wsConnection._socket->set_close_callback(std::bind(&Service::onFail, shared_from_this(), wsConnectionPtr));
     wsConnection._socket->set_receive_callback(std::bind(&Service::onMessage, shared_from_this(), wsConnectionPtr, std::placeholders::_1));
     if (wsConnection._socket->connect(url)) {
       CCAPI_LOGGER_ERROR("unable to open epoll ws connection");
@@ -2509,7 +2499,6 @@ class Service : public std::enable_shared_from_this<Service> {
   std::shared_ptr<WsConnection> _binance_spot_exchange_wsConnectionPtr;
   std::shared_ptr<WsConnection> _binance_spot_dummy_wsConnectionPtr;
   std::queue<std::tuple<Request&, Queue<Event>*>> wsRequestsQueue;
-  std::queue<std::tuple<Request&, Queue<Event>*>> dummyWsRequestsQueue;
   const char* ws_env_var;
 #endif
   emumba::connector::io_handler& _io;
