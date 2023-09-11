@@ -274,21 +274,25 @@ class Service : public std::enable_shared_from_this<Service> {
       wsRequestsQueueptr.push(sharedRequest);
       prepareNewOrderRequeestForWebsocket(request);
     } else {
-      CCAPI_LOGGER_ERROR("Send new order on dummy Ws server.");
-      rapidjson::StringBuffer str_buff;
-      rapidjson::Writer<rapidjson::StringBuffer> writer(str_buff);
-      writer.StartObject();
-      writer.Key("id");
-      writer.String(request.getCorrelationId().c_str());
-      writer.Key("method");
-      writer.String("avgPrice");
-      writer.Key("params");
-      writer.StartObject();
-      writer.Key("symbol");
-      writer.String("BTCUSDT");
-      writer.EndObject();
-      writer.EndObject();
-      _binance_spot_dummy_wsConnectionPtr->_socket->send(str_buff.GetString());
+      if (_binance_spot_dummy_wsConnectionPtr != nullptr) {
+        CCAPI_LOGGER_DEBUG("Send new order on dummy Ws server.");
+        rapidjson::StringBuffer str_buff;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(str_buff);
+        writer.StartObject();
+        writer.Key("id");
+        writer.String(request.getCorrelationId().c_str());
+        writer.Key("method");
+        writer.String("avgPrice");
+        writer.Key("params");
+        writer.StartObject();
+        writer.Key("symbol");
+        writer.String("BTCUSDT");
+        writer.EndObject();
+        writer.EndObject();
+        _binance_spot_dummy_wsConnectionPtr->_socket->send(str_buff.GetString());
+      } else {
+        CCAPI_LOGGER_ERROR("Dummy websocket connection not established, dummy request not sent");
+      }
     }
   }
   void sendBinanceCancelOrderMessageonWs(Request& request, Queue<Event>* eventQueuePtr) {
