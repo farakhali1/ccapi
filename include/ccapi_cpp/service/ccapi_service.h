@@ -270,7 +270,8 @@ class Service : public std::enable_shared_from_this<Service> {
   }
   void sendBinanceNewOrderMessageonWs(Request& request, Queue<Event>* eventQueuePtr) {
     if (request.getCorrelationId().find("TestOrder") == std::string::npos) {
-      wsRequestsQueue.push(std::make_tuple(std::ref(request), eventQueuePtr));
+      std::shared_ptr<Request> sharedRequest = std::make_shared<Request>(request);
+      wsRequestsQueueptr.push(sharedRequest);
       prepareNewOrderRequeestForWebsocket(request);
     } else {
       CCAPI_LOGGER_ERROR("Send new order on dummy Ws server.");
@@ -291,8 +292,9 @@ class Service : public std::enable_shared_from_this<Service> {
     }
   }
   void sendBinanceCancelOrderMessageonWs(Request& request, Queue<Event>* eventQueuePtr) {
-    wsRequestsQueue.push(std::make_tuple(std::ref(request), eventQueuePtr));
-    CCAPI_LOGGER_INFO("prepare new order requeest for websocket");
+    std::shared_ptr<Request> sharedRequest = std::make_shared<Request>(request);
+    wsRequestsQueueptr.push(sharedRequest);
+    CCAPI_LOGGER_INFO("prepare cancel order requeest for websocket");
     request.appendParam({
         {"timestamp", std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count())},
         {"recvWindow", "60000"},
@@ -374,7 +376,7 @@ class Service : public std::enable_shared_from_this<Service> {
     _wsConnectionPtr->status = WsConnection::Status::OPEN;
     CCAPI_LOGGER_INFO("connection established on URL: " + _wsConnectionPtr->getUrl());
   }
-  void onBinanceSpotMessage(std::string textMessage) {
+  void onBinanceSpotMessage(const std::string& textMessage) {
     auto now = UtilTime::now();
     CCAPI_LOGGER_DEBUG("Received response on websocket: " + toString(textMessage));
     rapidjson::Document response;
@@ -383,15 +385,19 @@ class Service : public std::enable_shared_from_this<Service> {
       std::string response_id = std::string(response["id"].GetString());
       if (response_id.find("TestOrder") == std::string::npos) {
         if (response["status"].GetInt() == 200) {
-          CCAPI_LOGGER_DEBUG("Response type is: " + toString(response["status"].GetInt()));
-          Request& _request = std::get<0>(wsRequestsQueue.front());
-          Queue<Event>* _eventQueuePtr = std::get<1>(wsRequestsQueue.front());
-          rapidjson::StringBuffer buffer;
-          rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-          response["result"].Accept(writer);
-          std::string jsonStr = buffer.GetString();
-          prepareOnRead_2Response(jsonStr, _request, _eventQueuePtr);
-          wsRequestsQueue.pop();
+          if (!wsRequestsQueueptr.empty()) {
+            CCAPI_LOGGER_DEBUG("Response status is: " + toString(response["status"].GetInt()));
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            response["result"].Accept(writer);
+            const std::string& jsonStr = buffer.GetString();
+            std::shared_ptr<Request> poppedRequest = wsRequestsQueueptr.front();
+            ccapi::Request _request = *poppedRequest.get();
+            wsRequestsQueueptr.pop();
+            prepareOnRead_2Response(jsonStr, _request, nullptr);
+          } else {
+            CCAPI_LOGGER_ERROR("Exchnage response received but queue is empty");
+          }
         }
       } else {
         CCAPI_LOGGER_DEBUG("Dummy order response received: " + textMessage);
@@ -602,10 +608,8 @@ class Service : public std::enable_shared_from_this<Service> {
 #ifdef ENABLE_EPOLL_HTTPS_CLIENT
 #ifdef BINACE_SPOT_ORDER_ENTRY_ON_WS
     if (request.getOperation() == ccapi::Request::Operation::CREATE_ORDER) {
-      CCAPI_LOGGER_INFO("sending new order request on ws");
       sendBinanceNewOrderMessageonWs(request, eventQueuePtr);
     } else if (request.getOperation() == ccapi::Request::Operation::CANCEL_ORDER) {
-      CCAPI_LOGGER_INFO("sending cancel order request on ws");
       sendBinanceCancelOrderMessageonWs(request, eventQueuePtr);
     } else {
 #endif
@@ -2498,7 +2502,7 @@ class Service : public std::enable_shared_from_this<Service> {
   uint _binance_spot_ws_id = 0;
   std::shared_ptr<WsConnection> _binance_spot_exchange_wsConnectionPtr;
   std::shared_ptr<WsConnection> _binance_spot_dummy_wsConnectionPtr;
-  std::queue<std::tuple<Request&, Queue<Event>*>> wsRequestsQueue;
+  std::queue<std::shared_ptr<ccapi::Request>> wsRequestsQueueptr;
   const char* ws_env_var;
 #endif
   emumba::connector::io_handler& _io;
