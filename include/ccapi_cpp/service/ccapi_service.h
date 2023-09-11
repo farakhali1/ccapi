@@ -190,7 +190,7 @@ class Service : public std::enable_shared_from_this<Service> {
   }
   virtual void subscribe(std::vector<Subscription>& subscriptionList) {}
 
-#ifdef BINACE_SPOT_ORDER_ENTRY_ON_WS
+#ifdef BINANCE_SPOT_ORDER_ENTRY_ON_WS
   void prepareNewOrderRequeestForWebsocket(Request& request) {
     CCAPI_LOGGER_INFO("prepare new order requeest for websocket");
     request.appendParam({
@@ -490,7 +490,7 @@ class Service : public std::enable_shared_from_this<Service> {
                                 std::bind(&ccapi::Service::onEpollHttpClose, this)) < 0) {
       onEpollHttpClose();
     }
-#ifdef BINACE_SPOT_ORDER_ENTRY_ON_WS
+#ifdef BINANCE_SPOT_ORDER_ENTRY_ON_WS
     std::vector<Subscription> subscriptionList;
     std::map<std::string, std::string> credentials;
     std::string url_spot = "wss://ws-api.binance.com:443/ws-api/v3";
@@ -524,7 +524,7 @@ class Service : public std::enable_shared_from_this<Service> {
         }
         is_dummy_connection_established = true;
       }
-#ifdef BINACE_SPOT_ORDER_ENTRY_ON_WS
+#ifdef BINANCE_SPOT_ORDER_ENTRY_ON_WS
       ws_env_var = std::getenv("WS_LOOPBACK_IP");
       if (!ws_env_var) {
         CCAPI_LOGGER_ERROR("WS address for loopback is not set | unable to create WS loopback connection");
@@ -606,7 +606,7 @@ class Service : public std::enable_shared_from_this<Service> {
   std::shared_ptr<std::future<void>> sendRequest(Request& request, const bool useFuture, const TimePoint& now, long delayMilliSeconds,
                                                  Queue<Event>* eventQueuePtr) {
 #ifdef ENABLE_EPOLL_HTTPS_CLIENT
-#ifdef BINACE_SPOT_ORDER_ENTRY_ON_WS
+#ifdef BINANCE_SPOT_ORDER_ENTRY_ON_WS
     if (request.getOperation() == ccapi::Request::Operation::CREATE_ORDER) {
       sendBinanceNewOrderMessageonWs(request, eventQueuePtr);
     } else if (request.getOperation() == ccapi::Request::Operation::CANCEL_ORDER) {
@@ -649,7 +649,7 @@ class Service : public std::enable_shared_from_this<Service> {
           CCAPI_LOGGER_INFO("Request sent successfully");
         }
       }
-#ifdef BINACE_SPOT_ORDER_ENTRY_ON_WS
+#ifdef BINANCE_SPOT_ORDER_ENTRY_ON_WS
     }
 #endif
     std::shared_ptr<std::future<void>> futurePtr(nullptr);
@@ -2498,7 +2498,7 @@ class Service : public std::enable_shared_from_this<Service> {
   virtual void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view textMessage, const TimePoint& timeReceived) {}
 #endif
 #if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
-#ifdef BINACE_SPOT_ORDER_ENTRY_ON_WS
+#ifdef BINANCE_SPOT_ORDER_ENTRY_ON_WS
   uint _binance_spot_ws_id = 0;
   std::shared_ptr<WsConnection> _binance_spot_exchange_wsConnectionPtr;
   std::shared_ptr<WsConnection> _binance_spot_dummy_wsConnectionPtr;
