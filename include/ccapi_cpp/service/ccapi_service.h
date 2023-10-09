@@ -402,6 +402,20 @@ class Service : public std::enable_shared_from_this<Service> {
           } else {
             CCAPI_LOGGER_ERROR("Exchnage response received but queue is empty");
           }
+        } else if (response["status"].GetInt() == 400) {
+          if (!wsRequestsQueueptr.empty()) {
+            CCAPI_LOGGER_DEBUG("Response status is: " + toString(response["status"].GetInt()));
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            response["error"].Accept(writer);
+            const std::string& jsonStr = buffer.GetString();
+            std::shared_ptr<Request> poppedRequest = wsRequestsQueueptr.front();
+            ccapi::Request _request = *poppedRequest.get();
+            wsRequestsQueueptr.pop();
+            prepareOnRead_2Response(jsonStr, _request, nullptr);
+          } else {
+            CCAPI_LOGGER_ERROR("Exchnage response received but queue is empty");
+          }
         }
       } else {
         CCAPI_LOGGER_DEBUG("Dummy order response received: " + textMessage);
