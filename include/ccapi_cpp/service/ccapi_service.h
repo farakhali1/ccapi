@@ -446,10 +446,14 @@ class Service : public std::enable_shared_from_this<Service> {
     message.setCorrelationIdList(correlationIdList);
     event.setMessageList({message});
     this->eventHandler(event, nullptr);
-    if (_wsConnectionPtr->_socket->socket_reconnect(ws_env_var) == false) {
-      sleep(1);
-      CCAPI_LOGGER_INFO("WS reconnection failed");
-      onBinanceSpotClose(_wsConnectionPtr);
+    bool is_connected = false;
+    int _number_of_tries = _wsConnectionPtr->retry_count;
+    while (_number_of_tries != 0 && !is_connected) {
+      is_connected = _wsConnectionPtr->_socket->socket_reconnect(ws_env_var);
+      if (is_connected == false) {
+        sleep(_wsConnectionPtr->retry_interval);
+      }
+      --_number_of_tries;
     }
   }
 #endif
@@ -525,6 +529,18 @@ class Service : public std::enable_shared_from_this<Service> {
     _binance_spot_exchange_wsConnectionPtr->_socket->set_receive_callback(std::bind(&Service::onBinanceSpotMessage, shared_from_this(), std::placeholders::_1));
     if (_binance_spot_exchange_wsConnectionPtr->_socket->connect(url)) {
       CCAPI_LOGGER_ERROR("unable to open epoll ws connection");
+      bool is_connected = false;
+      int _number_of_tries = _binance_spot_exchange_wsConnectionPtr->retry_count;
+      while (_number_of_tries != 0 && !is_connected) {
+        CCAPI_LOGGER_ERROR("AAA");
+        is_connected = _binance_spot_exchange_wsConnectionPtr->_socket->socket_reconnect(url);
+        CCAPI_LOGGER_ERROR("BBB");
+        if (is_connected == false) {
+          CCAPI_LOGGER_ERROR("CCC");
+          sleep(_binance_spot_exchange_wsConnectionPtr->retry_interval);
+        }
+        --_number_of_tries;
+      }
     } else {
       CCAPI_LOGGER_INFO("epoll ws connection opened successfully");
     }
@@ -563,6 +579,18 @@ class Service : public std::enable_shared_from_this<Service> {
             std::bind(&Service::onBinanceSpotMessage, shared_from_this(), std::placeholders::_1));
         if (_binance_spot_dummy_wsConnectionPtr->_socket->connect(url)) {
           CCAPI_LOGGER_ERROR("unable to open epoll ws connection");
+          bool is_connected = false;
+          int _number_of_tries = _binance_spot_dummy_wsConnectionPtr->retry_count;
+          while (_number_of_tries != 0 && !is_connected) {
+            CCAPI_LOGGER_ERROR("AAA");
+            is_connected = _binance_spot_dummy_wsConnectionPtr->_socket->socket_reconnect(url);
+            CCAPI_LOGGER_ERROR("BBB");
+            if (is_connected == false) {
+              CCAPI_LOGGER_ERROR("CCC");
+              sleep(_binance_spot_dummy_wsConnectionPtr->retry_interval);
+            }
+            --_number_of_tries;
+          }
         } else {
           CCAPI_LOGGER_INFO("epoll ws connection opened successfully");
         }
@@ -1742,6 +1770,18 @@ class Service : public std::enable_shared_from_this<Service> {
     wsConnection._socket->set_receive_callback(std::bind(&Service::onMessage, shared_from_this(), wsConnectionPtr, std::placeholders::_1));
     if (wsConnection._socket->connect(url)) {
       CCAPI_LOGGER_ERROR("unable to open epoll ws connection");
+      bool is_connected = false;
+      int _number_of_tries = wsConnectionPtr->retry_count;
+      while (_number_of_tries != 0 && !is_connected) {
+        CCAPI_LOGGER_ERROR("AAA");
+        is_connected = wsConnectionPtr->_socket->socket_reconnect(url);
+        CCAPI_LOGGER_ERROR("BBB");
+        if (is_connected == false) {
+          CCAPI_LOGGER_ERROR("CCC");
+          sleep(wsConnectionPtr->retry_interval);
+        }
+        --_number_of_tries;
+      }
     } else {
       CCAPI_LOGGER_INFO("epoll ws connection opened successfully");
       this->wsConnectionByIdMap.insert(std::make_pair(wsConnectionPtr->id, wsConnectionPtr));
@@ -1985,9 +2025,13 @@ class Service : public std::enable_shared_from_this<Service> {
     CCAPI_LOGGER_INFO("connection " + toString(wsConnection) + " is closed");
     this->clearStates(wsConnectionPtr);
     this->wsConnectionByIdMap.erase(wsConnectionPtr->id);
+    // int _number_of_tries = wsConnectionPtr->retry_count;
+    // if (_number_of_tries != 0) {
+    //   --_number_of_tries;
     if (this->shouldContinue.load()) {
       this->prepareConnect(wsConnectionPtr);
     }
+    // }
     CCAPI_LOGGER_FUNCTION_EXIT;
   }
   virtual void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view textMessage, const TimePoint& timeReceived) {}
