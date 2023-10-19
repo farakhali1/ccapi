@@ -1770,8 +1770,8 @@ class Service : public std::enable_shared_from_this<Service> {
 // Rakurai Changes
 #elif ENABLE_EPOLL_WS_CLIENT
   void onRateTimerExpiry() {
-    CCAPI_LOGGER_TRACE("Rate limit timer exhausted | Sending  buffered message, count: " + toString(wsBufferedMessages.size()));
-    numberOfRequests = 50;
+    CCAPI_LOGGER_INFO("Rate limit timer exhausted | Sending  buffered message, count: " + toString(wsBufferedMessages.size()));
+    numberOfRequests = actualNumberOfRequests;
     auto BufferedMessages = wsBufferedMessages.begin();
     while (numberOfRequests != 0 && BufferedMessages != wsBufferedMessages.end()) {
       CCAPI_LOGGER_TRACE("Sending buffered request on websocket " + std::string(BufferedMessages->first));
@@ -2629,6 +2629,7 @@ class Service : public std::enable_shared_from_this<Service> {
   rakurai::utils::timer* _mytimer;
 #endif
   int numberOfRequests = -1;
+  int actualNumberOfRequests = -1;
   int RateLimitInterval = 1;
   bool isTimerIntervalSet = false;
   std::vector<std::pair<std::string, std::shared_ptr<WsConnection>>> wsBufferedMessages;
