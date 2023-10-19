@@ -2,6 +2,7 @@
 #define INCLUDE_CCAPI_CPP_SERVICE_CCAPI_SERVICE_H_
 #include "ccapi_cpp/ccapi_logger.h"
 #if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
+#include "epoll_timer.h"
 #include "https_client.h"
 #include "io_handler.h"
 #endif
@@ -122,6 +123,7 @@ class Service : public std::enable_shared_from_this<Service> {
       :
 #ifdef ENABLE_EPOLL_WS_CLIENT
         _io(io),
+        _rate_limit_timer(io),
 #endif
         eventHandler(eventHandler),
         sessionOptions(sessionOptions),
@@ -130,6 +132,11 @@ class Service : public std::enable_shared_from_this<Service> {
         resolver(*serviceContextPtr->ioContextPtr),
         resolverWs(*serviceContextPtr->ioContextPtr),
         httpConnectionPool(sessionOptions.httpConnectionPoolMaxSize) {
+#ifdef ENABLE_EPOLL_WS_CLIENT
+    _rate_limit_timer.set_cb(std::bind(&Service::onRateTimerExpiry, this));
+    _rate_limit_timer.set_interval(RateLimitInterval);
+    _rate_limit_timer.start();
+#endif
     this->enableCheckPingPongWebsocketProtocolLevel = this->sessionOptions.enableCheckPingPongWebsocketProtocolLevel;
     this->enableCheckPingPongWebsocketApplicationLevel = this->sessionOptions.enableCheckPingPongWebsocketApplicationLevel;
     // this->pingIntervalMilliSecondsByMethodMap[PingPongMethod::WEBSOCKET_PROTOCOL_LEVEL] = sessionOptions.pingWebsocketProtocolLevelIntervalMilliSeconds;
@@ -263,7 +270,15 @@ class Service : public std::enable_shared_from_this<Service> {
       rapidjson::Writer<rapidjson::StringBuffer> writer1(buffer1);
       new_order_json.Accept(writer1);
       CCAPI_LOGGER_DEBUG("Sending binance spot new order request on websocket " + std::string(buffer1.GetString()));
-      _binance_spot_exchange_wsConnectionPtr->_socket->send(buffer1.GetString());
+      if (numberOfRequests != 0) {
+        _binance_spot_exchange_wsConnectionPtr->_socket->send(buffer1.GetString());
+        if (numberOfRequests > 0) {
+          numberOfRequests--;
+        }
+      } else {
+        CCAPI_LOGGER_INFO("Internal Rate limit reached | Buffering message");
+        wsBufferedMessages.push_back(std::make_pair(std::string(buffer1.GetString()), _binance_spot_exchange_wsConnectionPtr));
+      }
     } else {
       CCAPI_LOGGER_ERROR("Error parsing JSON.");
     }
@@ -368,8 +383,16 @@ class Service : public std::enable_shared_from_this<Service> {
       rapidjson::StringBuffer str_buffer;
       rapidjson::Writer<rapidjson::StringBuffer> writer1(str_buffer);
       cancel_order_json.Accept(writer1);
-      CCAPI_LOGGER_DEBUG("Sending binance spot new order request on websocket " + std::string(str_buffer.GetString()));
-      _binance_spot_exchange_wsConnectionPtr->_socket->send(str_buffer.GetString());
+      CCAPI_LOGGER_DEBUG("Sending binance spot cancel order request on websocket " + std::string(str_buffer.GetString()));
+      if (numberOfRequests != 0) {
+        _binance_spot_exchange_wsConnectionPtr->_socket->send(str_buffer.GetString());
+        if (numberOfRequests > 0) {
+          numberOfRequests--;
+        }
+      } else {
+        CCAPI_LOGGER_INFO("Internal Rate limit reached | Buffering message");
+        wsBufferedMessages.push_back(std::make_pair(std::string(str_buffer.GetString()), _binance_spot_exchange_wsConnectionPtr));
+      }
     } else {
       CCAPI_LOGGER_ERROR("Error parsing JSON.");
     }
@@ -1746,6 +1769,22 @@ class Service : public std::enable_shared_from_this<Service> {
 
 // Rakurai Changes
 #elif ENABLE_EPOLL_WS_CLIENT
+  void onRateTimerExpiry() {
+    CCAPI_LOGGER_TRACE("Rate limit timer exhausted | Sending  buffered message, count: " + toString(wsBufferedMessages.size()));
+    numberOfRequests = 50;
+    auto BufferedMessages = wsBufferedMessages.begin();
+    while (numberOfRequests != 0 && BufferedMessages != wsBufferedMessages.end()) {
+      CCAPI_LOGGER_TRACE("Sending buffered request on websocket " + std::string(BufferedMessages->first));
+      BufferedMessages->second->_socket->send(BufferedMessages->first.c_str());
+      BufferedMessages = wsBufferedMessages.erase(BufferedMessages);
+      numberOfRequests--;
+    }
+    _rate_limit_timer.reset();
+    if (__builtin_expect(isTimerIntervalSet == false, false)) {
+      _rate_limit_timer.set_interval(RateLimitInterval);
+      isTimerIntervalSet = true;
+    }
+  }
   void close(std::shared_ptr<WsConnection> wsConnectionPtr, beast::websocket::close_code const code, beast::websocket::close_reason reason, ErrorCode& ec) {
     CCAPI_LOGGER_FUNCTION_ENTER;
     WsConnection& wsConnection = *wsConnectionPtr;
@@ -1880,7 +1919,15 @@ class Service : public std::enable_shared_from_this<Service> {
   }
   void send(std::shared_ptr<WsConnection> wsConnectionPtr, std::string payload) {
     WsConnection& wsConnection = *wsConnectionPtr;
-    wsConnection._socket->send(payload);
+    if (numberOfRequests != 0) {
+      wsConnection._socket->send(payload);
+      if (numberOfRequests > 0) {
+        numberOfRequests--;
+      }
+    } else {
+      CCAPI_LOGGER_INFO("Internal Rate limit reached | Buffering message");
+      wsBufferedMessages.push_back(std::make_pair(payload, wsConnectionPtr));
+    }
   }
   void ping(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view payload, ErrorCode& ec) {
     // if (!this->wsConnectionPendingPingingByIdMap[wsConnectionPtr->id]) {
@@ -2568,6 +2615,7 @@ class Service : public std::enable_shared_from_this<Service> {
   const char* ws_env_var;
 #endif
   emumba::connector::io_handler& _io;
+  emumba::connector::epoll_timer _rate_limit_timer;
   std::shared_ptr<emumba::connector::https::client> _https_session;
   std::shared_ptr<emumba::connector::https::client> _dummy_https_session;
   bool is_dummy_connection_established = false;
@@ -2580,6 +2628,10 @@ class Service : public std::enable_shared_from_this<Service> {
 #if defined TRACEPOINTS || defined ORDER_ENTRY_TRACEPOINTS
   rakurai::utils::timer* _mytimer;
 #endif
+  int numberOfRequests = -1;
+  int RateLimitInterval = 1;
+  bool isTimerIntervalSet = false;
+  std::vector<std::pair<std::string, std::shared_ptr<WsConnection>>> wsBufferedMessages;
   bool hostHttpHeaderValueIgnorePort{};
   std::string apiKeyName;
   std::string apiSecretName;
