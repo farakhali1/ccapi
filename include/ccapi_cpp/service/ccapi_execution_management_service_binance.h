@@ -34,9 +34,9 @@ class ExecutionManagementServiceBinance : public ExecutionManagementServiceBinan
     this->wsNumberOfRequests = 48;
     this->wsActualNumberOfRequests = 48;
     this->wsRateLimitInterval = 10;
-    this->httpNumberOfRequests = 48;
-    this->httpActualNumberOfRequests = 48;
-    this->httpRateLimitInterval = 10;
+    this->httpNumberOfRequests = 5;
+    this->httpActualNumberOfRequests = 5;
+    this->httpRateLimitInterval = 20;
     this->apiSecretName = CCAPI_BINANCE_API_SECRET;
     this->setupCredential({this->apiKeyName, this->apiSecretName});
     this->createOrderTarget = CCAPI_BINANCE_CREATE_ORDER_PATH;

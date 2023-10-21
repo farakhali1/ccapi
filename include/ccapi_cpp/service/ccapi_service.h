@@ -738,13 +738,21 @@ class Service : public std::enable_shared_from_this<Service> {
           CCAPI_LOGGER_ERROR("Dummy connection not established unable to send dummy request | Type: " + request.getCorrelationId());
         }
       } else {
-        CCAPI_LOGGER_DEBUG("Sending new request | Type: " + request.getCorrelationId());
-        if (!_https_session->send(std::bind(&ccapi::Service::prepareOnRead_2Response, this, std::placeholders::_1, request, eventQueuePtr), req_method,
-                                  req_target, "", _header)) {
-          CCAPI_LOGGER_ERROR("Request sending failed, retry request");
-          retryHttpRequest();
+        if (httpNumberOfRequests != 0) {
+          CCAPI_LOGGER_DEBUG("Sending new request | Type: " + request.getCorrelationId());
+          if (!_https_session->send(std::bind(&ccapi::Service::prepareOnRead_2Response, this, std::placeholders::_1, request, eventQueuePtr), req_method,
+                                    req_target, "", _header)) {
+            CCAPI_LOGGER_ERROR("Request sending failed, retry request");
+            retryHttpRequest();
+          } else {
+            CCAPI_LOGGER_INFO("Request sent successfully");
+          }
+          if (httpNumberOfRequests > 0) {
+            httpNumberOfRequests--;
+          }
         } else {
-          CCAPI_LOGGER_INFO("Request sent successfully");
+          CCAPI_LOGGER_INFO("Internal Rate limit reached | Buffering http message");
+          httpBufferedRequests.push_back({req_method, req_target, _header, request, eventQueuePtr, _https_session});
         }
       }
 #ifdef BINANCE_SPOT_ORDER_ENTRY_ON_WS
