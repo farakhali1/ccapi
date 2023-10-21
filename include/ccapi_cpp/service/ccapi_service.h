@@ -555,11 +555,8 @@ class Service : public std::enable_shared_from_this<Service> {
       bool is_connected = false;
       int _number_of_tries = _binance_spot_exchange_wsConnectionPtr->retry_count;
       while (_number_of_tries != 0 && !is_connected) {
-        CCAPI_LOGGER_ERROR("AAA");
         is_connected = _binance_spot_exchange_wsConnectionPtr->_socket->socket_reconnect(url);
-        CCAPI_LOGGER_ERROR("BBB");
         if (is_connected == false) {
-          CCAPI_LOGGER_ERROR("CCC");
           sleep(_binance_spot_exchange_wsConnectionPtr->retry_interval);
         }
         --_number_of_tries;
@@ -605,11 +602,8 @@ class Service : public std::enable_shared_from_this<Service> {
           bool is_connected = false;
           int _number_of_tries = _binance_spot_dummy_wsConnectionPtr->retry_count;
           while (_number_of_tries != 0 && !is_connected) {
-            CCAPI_LOGGER_ERROR("AAA");
             is_connected = _binance_spot_dummy_wsConnectionPtr->_socket->socket_reconnect(url);
-            CCAPI_LOGGER_ERROR("BBB");
             if (is_connected == false) {
-              CCAPI_LOGGER_ERROR("CCC");
               sleep(_binance_spot_dummy_wsConnectionPtr->retry_interval);
             }
             --_number_of_tries;
@@ -1812,11 +1806,8 @@ class Service : public std::enable_shared_from_this<Service> {
       bool is_connected = false;
       int _number_of_tries = wsConnectionPtr->retry_count;
       while (_number_of_tries != 0 && !is_connected) {
-        CCAPI_LOGGER_ERROR("AAA");
         is_connected = wsConnectionPtr->_socket->socket_reconnect(url);
-        CCAPI_LOGGER_ERROR("BBB");
         if (is_connected == false) {
-          CCAPI_LOGGER_ERROR("CCC");
           sleep(wsConnectionPtr->retry_interval);
         }
         --_number_of_tries;
