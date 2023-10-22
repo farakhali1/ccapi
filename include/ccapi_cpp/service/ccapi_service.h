@@ -487,20 +487,21 @@ class Service : public std::enable_shared_from_this<Service> {
 
 #ifdef ENABLE_EPOLL_HTTPS_CLIENT
   void onHttpRateTimerExpiry() {
-    CCAPI_LOGGER_INFO("Http Rate limit timer exhausted | Sending  buffered request, count: " + toString(httpBufferedRequests.size()));
+    CCAPI_LOGGER_INFO("Http Rate limit timer exhausted | buffered request: " + toString(httpBufferedRequests.size()));
     httpNumberOfRequests = httpActualNumberOfRequests;
     auto BufferedRequests = httpBufferedRequests.begin();
     while (httpNumberOfRequests != 0 && BufferedRequests != httpBufferedRequests.end()) {
-      CCAPI_LOGGER_TRACE("Sending buffered http request ");
+      ccapi::Request _request = *BufferedRequests->request.get();
+      CCAPI_LOGGER_TRACE("Sending buffered http request " + _request.toString());
       if (!BufferedRequests->httpsSession->send(
-              std::bind(&ccapi::Service::prepareOnRead_2Response, this, std::placeholders::_1, BufferedRequests->request, BufferedRequests->eventQueue),
+              std::bind(&ccapi::Service::prepareOnRead_2Response, this, std::placeholders::_1, _request, BufferedRequests->eventQueue),
               BufferedRequests->requestMethod, BufferedRequests->requestTarget, "", BufferedRequests->requestHeader)) {
         CCAPI_LOGGER_ERROR("Request sending failed, retry request");
         retryHttpRequest();
       } else {
         CCAPI_LOGGER_INFO("Request sent successfully");
       }
-
+      httpBufferedRequests.erase(BufferedRequests);
       httpNumberOfRequests--;
     }
     _http_rate_limit_timer.reset();
@@ -676,7 +677,7 @@ class Service : public std::enable_shared_from_this<Service> {
           }
         } else {
           CCAPI_LOGGER_INFO("Internal Rate limit reached | Buffering http message");
-          httpBufferedRequests.push_back({req_method, req_target, _header, _request, _eventQueuePtr, _https_session});
+          httpBufferedRequests.push_back({req_method, req_target, _header, std::make_shared<ccapi::Request>(_request), _eventQueuePtr, _https_session});
         }
       } else {
         std::string errorMessage = _retry.numRetry > this->sessionOptions.httpMaxNumRetry ? "max retry exceeded" : "max redirect exceeded";
@@ -752,7 +753,7 @@ class Service : public std::enable_shared_from_this<Service> {
           }
         } else {
           CCAPI_LOGGER_INFO("Internal Rate limit reached | Buffering http message");
-          httpBufferedRequests.push_back({req_method, req_target, _header, request, eventQueuePtr, _https_session});
+          httpBufferedRequests.push_back({req_method, req_target, _header, std::make_shared<ccapi::Request>(request), eventQueuePtr, _https_session});
         }
       }
 #ifdef BINANCE_SPOT_ORDER_ENTRY_ON_WS
@@ -2663,7 +2664,7 @@ class Service : public std::enable_shared_from_this<Service> {
     std::string requestMethod;
     std::string requestTarget;
     std::map<std::string, std::string> requestHeader;
-    Request& request;
+    std::shared_ptr<ccapi::Request> request;
     Queue<Event>* eventQueue;
     std::shared_ptr<emumba::connector::https::client> httpsSession;
   };
