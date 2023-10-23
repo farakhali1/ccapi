@@ -493,9 +493,24 @@ class Service : public std::enable_shared_from_this<Service> {
     while (httpNumberOfRequests != 0 && BufferedRequests != httpBufferedRequests.end()) {
       ccapi::Request _request = *BufferedRequests->request.get();
       CCAPI_LOGGER_TRACE("Sending buffered http request " + _request.toString());
+      http::request<http::string_body> req;
+      TimePoint then;
+      if (delayMilliSeconds > 0) {
+        then = now + std::chrono::milliseconds(delayMilliSeconds);
+      } else {
+        then = now;
+      }
+      req = this->convertRequest(request, then);
+      const auto& headers = req.base();
+      for (const auto& header : headers) {
+        CCAPI_LOGGER_DEBUG("Header Name: " + header.name_string().to_string() + " Value: " + header.value().to_string());
+        _header[header.name_string().to_string()] = header.value().to_string();
+      }
+      req_method = req.base().method_string().to_string();
+      req_target = req.target().to_string();
       if (!BufferedRequests->httpsSession->send(
-              std::bind(&ccapi::Service::prepareOnRead_2Response, this, std::placeholders::_1, _request, BufferedRequests->eventQueue),
-              BufferedRequests->requestMethod, BufferedRequests->requestTarget, "", BufferedRequests->requestHeader)) {
+              std::bind(&ccapi::Service::prepareOnRead_2Response, this, std::placeholders::_1, _request, BufferedRequests->eventQueue), req_method, req_target,
+              "", _header)) {
         CCAPI_LOGGER_ERROR("Request sending failed, retry request");
         retryHttpRequest();
       } else {
@@ -651,19 +666,19 @@ class Service : public std::enable_shared_from_this<Service> {
       HttpRetry& _retry = std::get<2>(failedRequestRetryQueue.front());
       _retry.numRetry += 1;
       if (_retry.numRetry <= this->sessionOptions.httpMaxNumRetry && _retry.numRedirect <= this->sessionOptions.httpMaxNumRedirect) {
-        createNewHttpSession(_io, false);
-        http::request<http::string_body> req;
-        TimePoint then = UtilTime::now();
-        req = this->convertRequest(_request, then);
-        const auto& headers = req.base();
-        for (const auto& header : headers) {
-          CCAPI_LOGGER_DEBUG("Header Name: " + header.name_string().to_string() + " Value: " + header.value().to_string());
-          _header[header.name_string().to_string()] = header.value().to_string();
-        }
-        req_method = req.base().method_string().to_string();
-        req_target = req.target().to_string();
-
         if (httpNumberOfRequests != 0) {
+          createNewHttpSession(_io, false);
+          http::request<http::string_body> req;
+          TimePoint then = UtilTime::now();
+          req = this->convertRequest(_request, then);
+          const auto& headers = req.base();
+          for (const auto& header : headers) {
+            CCAPI_LOGGER_DEBUG("Header Name: " + header.name_string().to_string() + " Value: " + header.value().to_string());
+            _header[header.name_string().to_string()] = header.value().to_string();
+          }
+          req_method = req.base().method_string().to_string();
+          req_target = req.target().to_string();
+
           CCAPI_LOGGER_DEBUG("Sending new request | Type: " + _request.getCorrelationId());
           if (!_https_session->send(std::bind(&ccapi::Service::prepareOnRead_2Response, this, std::placeholders::_1, _request, _eventQueuePtr), req_method,
                                     req_target, "", _header)) {
@@ -677,7 +692,7 @@ class Service : public std::enable_shared_from_this<Service> {
           }
         } else {
           CCAPI_LOGGER_INFO("Internal Rate limit reached | Buffering http message");
-          httpBufferedRequests.push_back({req_method, req_target, _header, std::make_shared<ccapi::Request>(_request), _eventQueuePtr, _https_session});
+          httpBufferedRequests.push_back({std::make_shared<ccapi::Request>(_request), _eventQueuePtr, _https_session});
         }
       } else {
         std::string errorMessage = _retry.numRetry > this->sessionOptions.httpMaxNumRetry ? "max retry exceeded" : "max redirect exceeded";
@@ -753,7 +768,7 @@ class Service : public std::enable_shared_from_this<Service> {
           }
         } else {
           CCAPI_LOGGER_INFO("Internal Rate limit reached | Buffering http message");
-          httpBufferedRequests.push_back({req_method, req_target, _header, std::make_shared<ccapi::Request>(request), eventQueuePtr, _https_session});
+          httpBufferedRequests.push_back({std::make_shared<ccapi::Request>(request), eventQueuePtr, _https_session});
         }
       }
 #ifdef BINANCE_SPOT_ORDER_ENTRY_ON_WS
@@ -2661,9 +2676,6 @@ class Service : public std::enable_shared_from_this<Service> {
   std::queue<std::tuple<Request&, Queue<Event>*, HttpRetry&>> failedRequestRetryQueue;
   const char* http_env_var;
   struct _buffer_req_struct {
-    std::string requestMethod;
-    std::string requestTarget;
-    std::map<std::string, std::string> requestHeader;
     std::shared_ptr<ccapi::Request> request;
     Queue<Event>* eventQueue;
     std::shared_ptr<emumba::connector::https::client> httpsSession;
