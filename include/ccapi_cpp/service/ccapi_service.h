@@ -494,13 +494,7 @@ class Service : public std::enable_shared_from_this<Service> {
       ccapi::Request _request = *BufferedRequests->request.get();
       CCAPI_LOGGER_TRACE("Sending buffered http request " + _request.toString());
       http::request<http::string_body> req;
-      TimePoint then;
-      if (delayMilliSeconds > 0) {
-        then = now + std::chrono::milliseconds(delayMilliSeconds);
-      } else {
-        then = now;
-      }
-      req = this->convertRequest(request, then);
+      req = this->convertRequest(_request, UtilTime::now());
       const auto& headers = req.base();
       for (const auto& header : headers) {
         CCAPI_LOGGER_DEBUG("Header Name: " + header.name_string().to_string() + " Value: " + header.value().to_string());
