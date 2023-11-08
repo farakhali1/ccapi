@@ -735,6 +735,8 @@ class ExecutionManagementServiceBinanceBase : public ExecutionManagementService 
         element.insert(CCAPI_EM_CLIENT_ORDER_ID, std::string(data["c"].GetString()));
         element.insert(EXCHANGE_UPDATE_TIME, std::string(data["E"].GetString()));
         element.insert(SUBSCRIPTION_RESPONSE_TYPE, std::string(data["x"].GetString()));
+        element.insert(CCAPI_EM_ORDER_LIMIT_PRICE, std::string(data["p"].GetString()));
+        element.insert(CCAPI_EM_ORDER_QUANTITY, std::string(data["q"].GetString()));
         element.insert(CCAPI_EM_ORDER_INSTRUMENT, instrument);
         {
           auto it = data.FindMember("n");

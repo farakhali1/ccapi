@@ -1284,6 +1284,13 @@ class MarketDataService : public Service {
                 element.emplace(k5, it->second);
               }
             }
+            {
+              auto it = y.find(MarketDataMessage::DataFieldType::UPDATE_TIME);
+              if (it != y.end()) {
+                std::string k6(EXCHANGE_UPDATE_TIME);
+                element.emplace(k6, it->second);
+              }
+            }
             elementList.emplace_back(std::move(element));
           }
         } else {
