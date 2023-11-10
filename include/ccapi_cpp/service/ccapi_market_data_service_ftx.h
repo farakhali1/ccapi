@@ -7,8 +7,8 @@ namespace ccapi {
 class MarketDataServiceFtx : public MarketDataServiceFtxBase {
  public:
   MarketDataServiceFtx(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                       ServiceContext* serviceContextPtr)
-      : MarketDataServiceFtxBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+                       ServiceContext* serviceContextPtr, emumba::connector::io_handler& io)
+      : MarketDataServiceFtxBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_FTX;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/ws";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);

@@ -52,7 +52,12 @@ class SessionOptions CCAPI_FINAL {
   int httpConnectionPoolMaxSize{1};  // used to set the maximal number of http connections to be kept in the pool (connections in the pool are idle)
   long httpConnectionKeepAliveTimeoutSeconds{
       10};  // used to remove a http connection from the http connection pool if it has stayed idle for at least this amount of time
-  bool enableOneHttpConnectionPerRequest{};  // create a new http connection for each request
+  bool enableOneHttpConnectionPerRequest{};           // create a new http connection for each request
+  long httpConnectionPoolIdleTimeoutMilliSeconds{0};  // used to purge the http connection pool if all connections in the
+                                                      // pool have stayed idle for at least this amount of time
+                                                      // create a new http connection for each request
+  bool createMarketDataSessionsOnly = false;
+  bool createExecutionDataSessionsOnly = false;
 #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
 #else
   long websocketConnectTimeoutMilliseconds{10000};

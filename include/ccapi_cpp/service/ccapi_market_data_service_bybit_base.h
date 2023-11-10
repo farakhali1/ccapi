@@ -7,8 +7,8 @@ namespace ccapi {
 class MarketDataServiceBybitBase : public MarketDataService {
  public:
   MarketDataServiceBybitBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                             ServiceContext* serviceContextPtr)
-      : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {}
+                             ServiceContext* serviceContextPtr, emumba::connector::io_handler& io)
+      : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {}
   virtual ~MarketDataServiceBybitBase() {}
 #ifndef CCAPI_EXPOSE_INTERNAL
 

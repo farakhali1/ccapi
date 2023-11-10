@@ -7,8 +7,8 @@ namespace ccapi {
 class MarketDataServiceBybit : public MarketDataServiceBybitBase {
  public:
   MarketDataServiceBybit(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                         ServiceContext* serviceContextPtr)
-      : MarketDataServiceBybitBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+                         ServiceContext* serviceContextPtr, emumba::connector::io_handler& io)
+      : MarketDataServiceBybitBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_BYBIT;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/spot/public/v3";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);

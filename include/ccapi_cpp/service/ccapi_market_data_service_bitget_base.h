@@ -7,8 +7,8 @@ namespace ccapi {
 class MarketDataServiceBitgetBase : public MarketDataService {
  public:
   MarketDataServiceBitgetBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                              ServiceContext* serviceContextPtr)
-      : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+                              ServiceContext* serviceContextPtr, emumba::connector::io_handler& io)
+      : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
     this->hostHttpHeaderValueIgnorePort = true;
   }
   virtual ~MarketDataServiceBitgetBase() {}

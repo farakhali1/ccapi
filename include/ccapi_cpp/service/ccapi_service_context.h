@@ -70,6 +70,9 @@ class ServiceContext CCAPI_FINAL {
 } /* namespace ccapi */
 #else
 #include "ccapi_cpp/ccapi_logger.h"
+#ifdef ENABLE_EPOLL_HTTPS_CLIENT
+#include "io_handler.h"
+#endif
 namespace ccapi {
 /**
  * Defines the service that the service depends on.
@@ -81,11 +84,12 @@ class ServiceContext CCAPI_FINAL {
   typedef boost::asio::executor_work_guard<boost::asio::io_context::executor_type> ExecutorWorkGuard;
   typedef ExecutorWorkGuard* ExecutorWorkGuardPtr;
   typedef boost::asio::ssl::context SslContext;
-  typedef SslContext* SslContextPtr;
+  typedef std::shared_ptr<SslContext> SslContextPtr;
+#ifdef ENABLE_EPOLL_HTTPS_CLIENT
+  ServiceContext(emumba::connector::io_handler& io) : _io(io) {
+#else
   ServiceContext() {
-    this->ioContextPtr = new boost::asio::io_context();
-    this->executorWorkGuardPtr = new ExecutorWorkGuard(this->ioContextPtr->get_executor());
-    this->sslContextPtr = new SslContext(SslContext::tls_client);
+#endif
     // this->sslContextPtr->set_options(SslContext::default_workarounds | SslContext::no_sslv2 | SslContext::no_sslv3 | SslContext::single_dh_use);
     this->sslContextPtr->set_verify_mode(boost::asio::ssl::verify_none);
     // TODO(cryptochassis): verify ssl certificate to strengthen security
@@ -120,19 +124,26 @@ class ServiceContext CCAPI_FINAL {
   }
   void start() {
     CCAPI_LOGGER_INFO("about to start client asio io_context run loop");
+#ifdef ENABLE_EPOLL_HTTPS_CLIENT
+    while (1) {
+      this->ioContextPtr->poll();
+      this->_io.poll();
+    }
+#else
     this->ioContextPtr->run();
+#endif
     CCAPI_LOGGER_INFO("just exited client asio io_context run loop");
   }
   void stop() {
     this->executorWorkGuardPtr->reset();
     this->ioContextPtr->stop();
   }
-  IoContextPtr ioContextPtr{nullptr};
-  ExecutorWorkGuardPtr executorWorkGuardPtr{nullptr};
-  SslContextPtr sslContextPtr{nullptr};
-  // IoContextPtr ioContextPtr{new IoContext()};
-  // ExecutorWorkGuardPtr executorWorkGuardPtr{new ExecutorWorkGuard(ioContextPtr->get_executor())};
-  // SslContextPtr sslContextPtr{new SslContext(SslContext::tls_client)};
+  IoContextPtr ioContextPtr{new IoContext()};
+#ifdef ENABLE_EPOLL_HTTPS_CLIENT
+  emumba::connector::io_handler& _io;
+#endif
+  ExecutorWorkGuardPtr executorWorkGuardPtr{new ExecutorWorkGuard(ioContextPtr->get_executor())};
+  SslContextPtr sslContextPtr{new SslContext(SslContext::tls_client)};
 };
 
 } /* namespace ccapi */

@@ -7,8 +7,8 @@ namespace ccapi {
 class ExecutionManagementServiceGateioPerpetualFutures : public ExecutionManagementServiceGateioBase {
  public:
   ExecutionManagementServiceGateioPerpetualFutures(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions,
-                                                   SessionConfigs sessionConfigs, ServiceContextPtr serviceContextPtr)
-      : ExecutionManagementServiceGateioBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+                                                   SessionConfigs sessionConfigs, ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
+      : ExecutionManagementServiceGateioBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io), _io(io) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_GATEIO_PERPETUAL_FUTURES;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/v4/ws/";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
@@ -118,8 +118,12 @@ class ExecutionManagementServiceGateioPerpetualFutures : public ExecutionManagem
                                   that->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::SUBSCRIPTION_FAILURE, ec, "create stream", {subscription.getCorrelationId()});
                                   return;
                                 }
-                                std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(that->baseUrlWs + settle, "", {subscription}, credential, streamPtr));
-                                CCAPI_LOGGER_WARN("about to subscribe with new wsConnectionPtr " + toString(*wsConnectionPtr));
+#ifdef ENABLE_EPOLL_WS_CLIENT
+                                std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(that->baseUrlWs, "", {subscription}, credential, that->_io, ++(that->_ws_id)));
+#else
+                                std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(that->baseUrlWs, "", {subscription}, credential, streamPtr));
+#endif
+  CCAPI_LOGGER_WARN("about to subscribe with new wsConnectionPtr " + toString(*wsConnectionPtr));
                                 that->prepareConnect(wsConnectionPtr);
 #endif
                             }
@@ -128,6 +132,8 @@ class ExecutionManagementServiceGateioPerpetualFutures : public ExecutionManagem
     }
     CCAPI_LOGGER_FUNCTION_EXIT;
   }
+  emumba::connector::io_handler& _io;
+  uint _ws_id = 0;
 };
 } /* namespace ccapi */
 #endif

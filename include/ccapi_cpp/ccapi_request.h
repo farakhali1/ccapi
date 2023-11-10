@@ -210,28 +210,32 @@ class Request CCAPI_FINAL {
           this->port = CCAPI_HTTP_PORT_DEFAULT;
         }
       }
-    }
-  }
+      std::string getParamValue(const std::string& ParamName, const std::string valueDefault = "") const {
+        for (const auto& ParamNameByValueMap : paramList) {
+          auto it = ParamNameByValueMap.find(ParamName);
+          return it == ParamNameByValueMap.end() ? valueDefault : it->second;
+        }
+      }
 #ifndef CCAPI_EXPOSE_INTERNAL
 
- private:
+     private:
 #endif
-  std::string exchange;
-  std::string marginType;
-  std::string instrument;
-  std::string serviceName;
-  std::string correlationId;
-  std::string secondaryCorrelationId;
-  std::vector<std::map<std::string, std::string> > paramList;
-  std::map<std::string, std::string> credential;
-  Operation operation;
-  std::vector<std::vector<std::pair<int, std::string> > > paramListFix;
-  TimePoint timeSent{std::chrono::seconds{0}};
-  int index{};
-  std::string localIpAddress;
-  std::string baseUrl;
-  std::string host;
-  std::string port;
-};
-} /* namespace ccapi */
+      std::string exchange;
+      std::string marginType;
+      std::string instrument;
+      std::string serviceName;
+      std::string correlationId;
+      std::string secondaryCorrelationId;
+      std::vector<std::map<std::string, std::string> > paramList;
+      std::map<std::string, std::string> credential;
+      Operation operation;
+      std::vector<std::vector<std::pair<int, std::string> > > paramListFix;
+      TimePoint timeSent{std::chrono::seconds{0}};
+      int index{};
+      std::string localIpAddress;
+      std::string baseUrl;
+      std::string host;
+      std::string port;
+    };
+  }     /* namespace ccapi */
 #endif  // INCLUDE_CCAPI_CPP_CCAPI_REQUEST_H_

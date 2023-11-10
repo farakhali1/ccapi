@@ -7,8 +7,8 @@ namespace ccapi {
 class ExecutionManagementServiceGateioBase : public ExecutionManagementService {
  public:
   ExecutionManagementServiceGateioBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                                       ServiceContextPtr serviceContextPtr)
-      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {}
+                                       ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
+      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {}
   virtual ~ExecutionManagementServiceGateioBase() {}
 #ifndef CCAPI_EXPOSE_INTERNAL
 

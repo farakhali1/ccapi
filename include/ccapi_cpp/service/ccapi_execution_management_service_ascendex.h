@@ -7,8 +7,8 @@ namespace ccapi {
 class ExecutionManagementServiceAscendex : public ExecutionManagementService {
  public:
   ExecutionManagementServiceAscendex(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                                     ServiceContextPtr serviceContextPtr)
-      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+                                     ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
+      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io), _io(io) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_ASCENDEX;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName);
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
@@ -50,6 +50,10 @@ class ExecutionManagementServiceAscendex : public ExecutionManagementService {
     WsConnection& wsConnection = this->getWsConnectionFromConnectionPtr(this->serviceContextPtr->tlsClientPtr->get_con_from_hdl(hdl));
     wsConnection.status = WsConnection::Status::OPEN;
   }
+// Rakurai Changes
+#elif ENABLE_EPOLL_WS_CLIENT
+  void pingOnApplicationLevel(std::shared_ptr<WsConnection> wsConnectionPtr) override { this->send(wsConnectionPtr, R"({"op":"ping"})"); }
+  void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override { wsConnectionPtr->status = WsConnection::Status::OPEN; }
 #else
   void pingOnApplicationLevel(std::shared_ptr<WsConnection> wsConnectionPtr, ErrorCode& ec) override { this->send(wsConnectionPtr, R"({"op":"ping"})", ec); }
   void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override { wsConnectionPtr->status = WsConnection::Status::OPEN; }
@@ -376,8 +380,12 @@ class ExecutionManagementServiceAscendex : public ExecutionManagementService {
                                   that->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::SUBSCRIPTION_FAILURE, ec, "create stream", {subscription.getCorrelationId()});
                                   return;
                                 }
-                                std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(that->baseUrlWs + "/" + accountGroup + "/api/pro/v1/stream", "", {subscription}, credential, streamPtr));
-                                CCAPI_LOGGER_WARN("about to subscribe with new wsConnectionPtr " + toString(*wsConnectionPtr));
+#ifdef ENABLE_EPOLL_WS_CLIENT
+                                std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(that->baseUrlWs, "", {subscription}, credential,  that->_io, ++(that->_ws_id)));
+#else
+                                std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(that->baseUrlWs, "", {subscription}, credential, streamPtr));
+#endif
+ CCAPI_LOGGER_WARN("about to subscribe with new wsConnectionPtr " + toString(*wsConnectionPtr));
                                 that->prepareConnect(wsConnectionPtr);
 #endif
         });
@@ -540,8 +548,11 @@ class ExecutionManagementServiceAscendex : public ExecutionManagementService {
         if (type == "unauth") {
 #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
           ExecutionManagementService::onOpen(hdl);
-#else
+// Rakurai Changes
+#elif ENABLE_EPOLL_WS_CLIENT
           ExecutionManagementService::onOpen(wsConnectionPtr);
+#else
+        ExecutionManagementService::onOpen(wsConnectionPtr);
 #endif
         }
       }
@@ -550,6 +561,8 @@ class ExecutionManagementServiceAscendex : public ExecutionManagementService {
     return event;
   }
   std::string apiAccountGroupName;
+  emumba::connector::io_handler& _io;
+  uint _ws_id = 0;
 };
 } /* namespace ccapi */
 #endif

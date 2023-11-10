@@ -434,6 +434,9 @@
 #ifndef EXCHANGE_UPDATE_TIME
 #define EXCHANGE_UPDATE_TIME "Exchange_Update_Time"
 #endif
+#ifndef SUBSCRIPTION_RESPONSE_TYPE
+#define SUBSCRIPTION_RESPONSE_TYPE "Response_Type"
+#endif
 #ifndef CCAPI_EM_ORDER_SIDE_BUY
 #define CCAPI_EM_ORDER_SIDE_BUY "BUY"
 #endif
@@ -663,7 +666,7 @@
 #define CCAPI_BINANCE_LISTEN_KEY_ISOLATED_MARGIN_PATH "/sapi/v1/userDataStream/isolated"
 #endif
 #ifndef CCAPI_BINANCE_USDS_FUTURES_URL_REST_BASE
-#define CCAPI_BINANCE_USDS_FUTURES_URL_REST_BASE "https://fapi.binance.com"
+#define CCAPI_BINANCE_USDS_FUTURES_URL_REST_BASE "https://testnet.binancefuture.com"
 #endif
 #ifndef CCAPI_BINANCE_USDS_FUTURES_CREATE_ORDER_PATH
 #define CCAPI_BINANCE_USDS_FUTURES_CREATE_ORDER_PATH "/fapi/v1/order"

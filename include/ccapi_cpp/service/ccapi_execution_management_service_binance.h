@@ -10,8 +10,8 @@ namespace ccapi {
 class ExecutionManagementServiceBinance : public ExecutionManagementServiceBinanceBase {
  public:
   ExecutionManagementServiceBinance(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                                    ServiceContextPtr serviceContextPtr)
-      : ExecutionManagementServiceBinanceBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+                                    ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
+      : ExecutionManagementServiceBinanceBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_BINANCE;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/ws";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
@@ -31,6 +31,12 @@ class ExecutionManagementServiceBinance : public ExecutionManagementServiceBinan
     //     }
     // #endif
     this->apiKeyName = CCAPI_BINANCE_API_KEY;
+    this->wsNumberOfRequests = 48;
+    this->wsActualNumberOfRequests = 48;
+    this->wsRateLimitInterval = 10;
+    this->httpNumberOfRequests = 50;
+    this->httpActualNumberOfRequests = 50;
+    this->httpRateLimitInterval = 10;
     this->apiSecretName = CCAPI_BINANCE_API_SECRET;
     this->setupCredential({this->apiKeyName, this->apiSecretName});
     this->createOrderTarget = CCAPI_BINANCE_CREATE_ORDER_PATH;

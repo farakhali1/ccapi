@@ -7,8 +7,8 @@ namespace ccapi {
 class MarketDataServiceHuobiDerivativesBase : public MarketDataServiceHuobiBase {
  public:
   MarketDataServiceHuobiDerivativesBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                                        ServiceContext* serviceContextPtr)
-      : MarketDataServiceHuobiBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+                                        ServiceContext* serviceContextPtr, emumba::connector::io_handler& io)
+      : MarketDataServiceHuobiBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
     this->isDerivatives = true;
   }
   virtual ~MarketDataServiceHuobiDerivativesBase() {}

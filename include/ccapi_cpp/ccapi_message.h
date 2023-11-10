@@ -238,6 +238,7 @@ class Message CCAPI_FINAL {
   void setElementList(const std::vector<Element>& elementList) { this->elementList = elementList; }
   void setElementList(std::vector<Element>& elementList) { this->elementList = std::move(elementList); }
   const std::vector<std::string>& getCorrelationIdList() const { return correlationIdList; }
+  const std::string& getCorrelationId() const { return correlationIdList.front(); }
   const std::map<std::string, std::string>& getSecondaryCorrelationIdMap() const { return secondaryCorrelationIdMap; }
   void setCorrelationIdList(const std::vector<std::string>& correlationIdList) { this->correlationIdList = correlationIdList; }
   void setSecondaryCorrelationIdMap(const std::map<std::string, std::string>& secondaryCorrelationIdMap) {

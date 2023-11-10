@@ -83,6 +83,7 @@ class MarketDataMessage CCAPI_FINAL {
     CLOSE_PRICE = 9,
     VOLUME = 10,
     QUOTE_VOLUME = 11,
+    UPDATE_TIME = 12,
   };
   static std::string dataFieldTypeToString(DataFieldType dataFieldType) {
     std::string output;
@@ -122,6 +123,9 @@ class MarketDataMessage CCAPI_FINAL {
         break;
       case DataFieldType::QUOTE_VOLUME:
         output = "QUOTE_VOLUME";
+        break;
+      case DataFieldType::UPDATE_TIME:
+        output = "UPDATE_TIME";
         break;
       default:
         CCAPI_LOGGER_FATAL(CCAPI_UNSUPPORTED_VALUE);
