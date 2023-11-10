@@ -282,6 +282,7 @@ class MarketDataServiceBinanceBase : public MarketDataService {
         dataPoint.insert({MarketDataMessage::DataFieldType::SIZE, UtilString::normalizeDecimalString(std::string(data["q"].GetString()))});
         dataPoint.insert({MarketDataMessage::DataFieldType::TRADE_ID, std::string(data["E"].GetString())});
         dataPoint.insert({MarketDataMessage::DataFieldType::IS_BUYER_MAKER, data["m"].GetBool() ? "1" : "0"});
+        dataPoint.insert({MarketDataMessage::DataFieldType::UPDATE_TIME, std::string(data["T"].GetString())});
         marketDataMessage.data[MarketDataMessage::DataType::TRADE].emplace_back(std::move(dataPoint));
         marketDataMessageList.emplace_back(std::move(marketDataMessage));
       } else if (channelId == CCAPI_WEBSOCKET_BINANCE_BASE_CHANNEL_AGG_TRADE) {
@@ -296,6 +297,7 @@ class MarketDataServiceBinanceBase : public MarketDataService {
         dataPoint.insert({MarketDataMessage::DataFieldType::SIZE, UtilString::normalizeDecimalString(std::string(data["q"].GetString()))});
         dataPoint.insert({MarketDataMessage::DataFieldType::AGG_TRADE_ID, data["a"].GetString()});
         dataPoint.insert({MarketDataMessage::DataFieldType::IS_BUYER_MAKER, data["m"].GetBool() ? "1" : "0"});
+        dataPoint.insert({MarketDataMessage::DataFieldType::UPDATE_TIME, std::string(data["T"].GetString())});
         marketDataMessage.data[MarketDataMessage::DataType::AGG_TRADE].emplace_back(std::move(dataPoint));
         marketDataMessageList.emplace_back(std::move(marketDataMessage));
       }

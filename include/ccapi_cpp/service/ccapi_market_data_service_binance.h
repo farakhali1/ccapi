@@ -28,6 +28,12 @@ class MarketDataServiceBinance : public MarketDataServiceBinanceBase {
     }
 #endif
     this->apiKeyName = CCAPI_BINANCE_API_KEY;
+    this->wsNumberOfRequests = 60000;
+    this->wsActualNumberOfRequests = 60000;
+    this->wsRateLimitInterval = 300;
+    this->httpNumberOfRequests = 48;
+    this->httpActualNumberOfRequests = 48;
+    this->httpRateLimitInterval = 10;
     this->setupCredential({this->apiKeyName});
     this->getRecentTradesTarget = "/api/v3/trades";
     this->getRecentAggTradesTarget = "/api/v3/aggTrades";

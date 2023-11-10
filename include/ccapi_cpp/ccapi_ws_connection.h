@@ -201,6 +201,8 @@ class WsConnection CCAPI_FINAL {
   std::string path;
   std::string host;
   std::string port;
+  int retry_count = 1;
+  int retry_interval = 1;
 #ifndef CCAPI_EXPOSE_INTERNAL
  private:
 #endif

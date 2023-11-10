@@ -373,6 +373,9 @@
 #ifndef EXCHANGE_UPDATE_TIME
 #define EXCHANGE_UPDATE_TIME "Exchange_Update_Time"
 #endif
+#ifndef SUBSCRIPTION_RESPONSE_TYPE
+#define SUBSCRIPTION_RESPONSE_TYPE "Response_Type"
+#endif
 #ifndef CCAPI_EM_ORDER_SIDE_BUY
 #define CCAPI_EM_ORDER_SIDE_BUY "BUY"
 #endif
