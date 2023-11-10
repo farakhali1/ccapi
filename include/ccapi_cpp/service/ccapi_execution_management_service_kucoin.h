@@ -7,8 +7,8 @@ namespace ccapi {
 class ExecutionManagementServiceKucoin : public ExecutionManagementServiceKucoinBase {
  public:
   ExecutionManagementServiceKucoin(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                                   ServiceContextPtr serviceContextPtr)
-      : ExecutionManagementServiceKucoinBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+                                   ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
+      : ExecutionManagementServiceKucoinBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_KUCOIN;
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
     this->setHostRestFromUrlRest(this->baseUrlRest);

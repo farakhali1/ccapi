@@ -72,6 +72,7 @@ class MarketDataMessage CCAPI_FINAL {
     AGG_TRADE_ID = 3,
     IS_BUYER_MAKER = 4,
     SEQUENCE_NUMBER = 5,
+    UPDATE_TIME = 6,
   };
   static std::string dataFieldTypeToString(DataFieldType dataFieldType) {
     std::string output;
@@ -93,6 +94,9 @@ class MarketDataMessage CCAPI_FINAL {
         break;
       case DataFieldType::SEQUENCE_NUMBER:
         output = "SEQUENCE_NUMBER";
+        break;
+      case DataFieldType::UPDATE_TIME:
+        output = "UPDATE_TIME";
         break;
       default:
         CCAPI_LOGGER_FATAL(CCAPI_UNSUPPORTED_VALUE);

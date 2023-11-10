@@ -7,8 +7,8 @@ namespace ccapi {
 class MarketDataServiceBinance : public MarketDataServiceBinanceBase {
  public:
   MarketDataServiceBinance(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                           std::shared_ptr<ServiceContext> serviceContextPtr)
-      : MarketDataServiceBinanceBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+                           std::shared_ptr<ServiceContext> serviceContextPtr, emumba::connector::io_handler& io)
+      : MarketDataServiceBinanceBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_BINANCE;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/stream";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
@@ -28,6 +28,12 @@ class MarketDataServiceBinance : public MarketDataServiceBinanceBase {
     }
 #endif
     this->apiKeyName = CCAPI_BINANCE_API_KEY;
+    this->wsNumberOfRequests = 60000;
+    this->wsActualNumberOfRequests = 60000;
+    this->wsRateLimitInterval = 300;
+    this->httpNumberOfRequests = 48;
+    this->httpActualNumberOfRequests = 48;
+    this->httpRateLimitInterval = 10;
     this->setupCredential({this->apiKeyName});
     this->getRecentTradesTarget = "/api/v3/trades";
     this->getRecentAggTradesTarget = "/api/v3/aggTrades";

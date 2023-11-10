@@ -7,8 +7,8 @@ namespace ccapi {
 class MarketDataServiceGemini : public MarketDataService {
  public:
   MarketDataServiceGemini(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                          std::shared_ptr<ServiceContext> serviceContextPtr)
-      : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+                          std::shared_ptr<ServiceContext> serviceContextPtr, emumba::connector::io_handler& io)
+      : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_GEMINI;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/v1/marketdata";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
@@ -118,6 +118,77 @@ class MarketDataServiceGemini : public MarketDataService {
       this->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::GENERIC_ERROR, ec, "shutdown");
     }
     this->shouldProcessRemainingMessageOnClosingByConnectionIdMap[wsConnection.id] = false;
+  }
+// Rakurai Changes
+#elif ENABLE_EPOLL_WS_CLIENT
+  void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override {
+    MarketDataService::onOpen(wsConnectionPtr);
+    std::vector<std::string> correlationIdList;
+    for (const auto& subscriptionListByChannelIdSymbolId : this->subscriptionListByConnectionIdChannelIdSymbolIdMap.at(wsConnectionPtr->id)) {
+      auto channelId = subscriptionListByChannelIdSymbolId.first;
+      for (auto& subscriptionListByInstrument : subscriptionListByChannelIdSymbolId.second) {
+        auto symbolId = subscriptionListByInstrument.first;
+        int marketDepthSubscribedToExchange = this->marketDepthSubscribedToExchangeByConnectionIdChannelIdSymbolIdMap[wsConnectionPtr->id][channelId][symbolId];
+        if (marketDepthSubscribedToExchange == 1) {
+          this->l2UpdateIsReplaceByConnectionIdChannelIdSymbolIdMap[wsConnectionPtr->id][channelId][symbolId] = true;
+        }
+        auto exchangeSubscriptionId = wsConnectionPtr->getUrl();
+        this->channelIdSymbolIdByConnectionIdExchangeSubscriptionIdMap[wsConnectionPtr->id][exchangeSubscriptionId][CCAPI_CHANNEL_ID] = channelId;
+        this->channelIdSymbolIdByConnectionIdExchangeSubscriptionIdMap[wsConnectionPtr->id][exchangeSubscriptionId][CCAPI_SYMBOL_ID] = symbolId;
+        std::vector<std::string> correlationIdList_2 =
+            this->correlationIdListByConnectionIdChannelIdSymbolIdMap.at(wsConnectionPtr->id).at(channelId).at(symbolId);
+        correlationIdList.insert(correlationIdList.end(), correlationIdList_2.begin(), correlationIdList_2.end());
+      }
+    }
+    auto timeReceived = UtilTime::now();
+    Event event;
+    event.setType(Event::Type::SUBSCRIPTION_STATUS);
+    std::vector<Message> messageList;
+    Message message;
+    message.setTimeReceived(timeReceived);
+    message.setCorrelationIdList(correlationIdList);
+    message.setType(Message::Type::SUBSCRIPTION_STARTED);
+    messageList.emplace_back(std::move(message));
+    event.setMessageList(messageList);
+    this->eventHandler(event, nullptr);
+  }
+  void onClose(std::shared_ptr<WsConnection> wsConnectionPtr, ErrorCode ec) override {
+    this->sequenceByConnectionIdMap.erase(wsConnectionPtr->id);
+    MarketDataService::onClose(wsConnectionPtr, ec);
+  }
+  bool checkSequence(std::shared_ptr<WsConnection> wsConnectionPtr, int sequence) {
+    if (this->sequenceByConnectionIdMap.find(wsConnectionPtr->id) == this->sequenceByConnectionIdMap.end()) {
+      if (sequence != this->sessionConfigs.getInitialSequenceByExchangeMap().at(this->exchangeName)) {
+        CCAPI_LOGGER_WARN("incorrect initial sequence, wsConnection = " + toString(*wsConnectionPtr));
+        return false;
+      }
+      this->sequenceByConnectionIdMap.insert(std::pair<std::string, int>(wsConnectionPtr->id, sequence));
+      return true;
+    } else {
+      if (sequence - this->sequenceByConnectionIdMap[wsConnectionPtr->id] == 1) {
+        this->sequenceByConnectionIdMap[wsConnectionPtr->id] = sequence;
+        return true;
+      } else {
+        return false;
+      }
+    }
+  }
+  void onOutOfSequence(std::shared_ptr<WsConnection> wsConnectionPtr, int sequence, boost::beast::string_view textMessageView, const TimePoint& timeReceived,
+                       const std::string& exchangeSubscriptionId) {
+    int previous = 0;
+    if (this->sequenceByConnectionIdMap.find(wsConnectionPtr->id) != this->sequenceByConnectionIdMap.end()) {
+      previous = this->sequenceByConnectionIdMap[wsConnectionPtr->id];
+    }
+    this->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::INCORRECT_STATE_FOUND,
+                  "out of sequence: previous = " + toString(previous) + ", current = " + toString(sequence) + ", connection = " + toString(*wsConnectionPtr) +
+                      ", textMessage = " + std::string(textMessageView) + ", timeReceived = " + UtilTime::getISOTimestamp(timeReceived));
+    ErrorCode ec;
+    this->close(wsConnectionPtr, beast::websocket::close_code::normal, beast::websocket::close_reason(beast::websocket::close_code::normal, "out of sequence"),
+                ec);
+    if (ec) {
+      this->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::GENERIC_ERROR, ec, "shutdown");
+    }
+    this->shouldProcessRemainingMessageOnClosingByConnectionIdMap[wsConnectionPtr->id] = false;
   }
 #else
   void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override {

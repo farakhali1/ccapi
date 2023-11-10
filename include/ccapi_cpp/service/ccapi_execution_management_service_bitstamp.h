@@ -7,8 +7,8 @@ namespace ccapi {
 class ExecutionManagementServiceBitstamp : public ExecutionManagementService {
  public:
   ExecutionManagementServiceBitstamp(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                                     ServiceContextPtr serviceContextPtr)
-      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+                                     ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
+      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_BITSTAMP;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName);
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
@@ -328,6 +328,59 @@ class ExecutionManagementServiceBitstamp : public ExecutionManagementService {
             }
           }
           that->onFail_(thisWsConnection);
+        },
+        this->sessionOptions.httpRequestTimeoutMilliSeconds);
+  }
+// Rakurai Changes
+#elif ENABLE_EPOLL_WS_CLIENT
+  void prepareConnect(std::shared_ptr<WsConnection> wsConnectionPtr) override {
+    auto now = UtilTime::now();
+    auto hostPort = this->extractHostFromUrl(this->baseUrlRest);
+    std::string host = hostPort.first;
+    std::string port = hostPort.second;
+    http::request<http::string_body> req;
+    req.set(http::field::host, host);
+    req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+    req.method(http::verb::post);
+    std::string target = this->getWebSocketsTokenTarget;
+    req.target(target);
+    auto credential = wsConnectionPtr->subscriptionList.at(0).getCredential();
+    if (credential.empty()) {
+      credential = this->credentialDefault;
+    }
+    auto apiKey = mapGetWithDefault(credential, this->apiKeyName);
+    req.set("X-Auth", "BITSTAMP " + apiKey);
+    std::string nonce = UtilString::generateUuidV4();
+    req.set("X-Auth-Nonce", nonce);
+    req.set("X-Auth-Timestamp", std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count()));
+    req.set("X-Auth-Version", "v2");
+    std::string body;
+    this->signRequest(req, "", credential);
+    this->sendRequest(
+        req, [wsConnectionPtr, that = shared_from_base<ExecutionManagementServiceBitstamp>()](const beast::error_code& ec) { that->onFail_(wsConnectionPtr); },
+        [wsConnectionPtr, that = shared_from_base<ExecutionManagementServiceBitstamp>()](const http::response<http::string_body>& res) {
+          int statusCode = res.result_int();
+          std::string body = res.body();
+          if (statusCode / 100 == 2) {
+            try {
+              rj::Document document;
+              document.Parse<rj::kParseNumbersAsStringsFlag>(body.c_str());
+              if (document.HasMember("token") && document.HasMember("user_id")) {
+                std::string token = document["token"].GetString();
+                std::string userId = document["user_id"].GetString();
+                wsConnectionPtr->setUrl(that->baseUrlWs);
+                that->connect(wsConnectionPtr);
+                that->extraPropertyByConnectionIdMap[wsConnectionPtr->id].insert({
+                    {"token", token},
+                    {"userId", userId},
+                });
+              }
+              return;
+            } catch (const std::runtime_error& e) {
+              CCAPI_LOGGER_ERROR(std::string("e.what() = ") + e.what());
+            }
+          }
+          that->onFail_(wsConnectionPtr);
         },
         this->sessionOptions.httpRequestTimeoutMilliSeconds);
   }
