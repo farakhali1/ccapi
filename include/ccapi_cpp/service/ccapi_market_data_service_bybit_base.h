@@ -6,9 +6,15 @@
 namespace ccapi {
 class MarketDataServiceBybitBase : public MarketDataService {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   MarketDataServiceBybitBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                              ServiceContext* serviceContextPtr, emumba::connector::io_handler& io)
       : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {}
+#else
+  MarketDataServiceBybitBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                             std::shared_ptr<ServiceContext> serviceContextPtr)
+      : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {}
+#endif
   virtual ~MarketDataServiceBybitBase() {}
 #ifndef CCAPI_EXPOSE_INTERNAL
 

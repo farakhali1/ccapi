@@ -6,9 +6,15 @@
 namespace ccapi {
 class ExecutionManagementServiceGemini : public ExecutionManagementService {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   ExecutionManagementServiceGemini(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                    ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
       : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+#else
+  ExecutionManagementServiceGemini(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                                   ServiceContextPtr serviceContextPtr)
+      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
     this->exchangeName = CCAPI_EXCHANGE_NAME_GEMINI;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/v1/order/events";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
@@ -337,36 +343,36 @@ class ExecutionManagementServiceGemini : public ExecutionManagementService {
     this->connect(wsConnectionPtr);
   }
 #else
-  void prepareConnect(std::shared_ptr<WsConnection> wsConnectionPtr) override {
-    auto now = UtilTime::now();
-    auto subscription = wsConnectionPtr->subscriptionList.at(0);
-    const auto& fieldSet = subscription.getFieldSet();
-    const auto& instrumentSet = subscription.getInstrumentSet();
-    auto credential = wsConnectionPtr->subscriptionList.at(0).getCredential();
-    if (credential.empty()) {
-      credential = this->credentialDefault;
-    }
-    auto apiKey = mapGetWithDefault(credential, this->apiKeyName);
-    wsConnectionPtr->appendUrlPart("?heartbeat=true");
-    if (fieldSet == std::set<std::string>({CCAPI_EM_PRIVATE_TRADE})) {
-      wsConnectionPtr->appendUrlPart("&eventTypeFilter=fill");
-    }
-    if (!instrumentSet.empty()) {
-      for (const auto& instrument : instrumentSet) {
-        wsConnectionPtr->appendUrlPart("&symbolFilter=" + instrument);
-      }
-    }
-    wsConnectionPtr->appendUrlPart("&apiSessionFilter=" + apiKey);
-    wsConnectionPtr->headers.insert({"X-GEMINI-APIKEY", apiKey});
-    int64_t nonce = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-    std::string payload = R"({"request":"/v1/order/events","nonce":)" + std::to_string(nonce) + "}";
-    auto base64Payload = UtilAlgorithm::base64Encode(payload);
-    wsConnectionPtr->headers.insert({"X-GEMINI-PAYLOAD", base64Payload});
-    auto apiSecret = mapGetWithDefault(credential, this->apiSecretName);
-    auto signature = Hmac::hmac(Hmac::ShaVersion::SHA384, apiSecret, base64Payload, true);
-    wsConnectionPtr->headers.insert({"X-GEMINI-SIGNATURE", signature});
-    this->connect(wsConnectionPtr);
+void prepareConnect(std::shared_ptr<WsConnection> wsConnectionPtr) override {
+  auto now = UtilTime::now();
+  auto subscription = wsConnectionPtr->subscriptionList.at(0);
+  const auto& fieldSet = subscription.getFieldSet();
+  const auto& instrumentSet = subscription.getInstrumentSet();
+  auto credential = wsConnectionPtr->subscriptionList.at(0).getCredential();
+  if (credential.empty()) {
+    credential = this->credentialDefault;
   }
+  auto apiKey = mapGetWithDefault(credential, this->apiKeyName);
+  wsConnectionPtr->appendUrlPart("?heartbeat=true");
+  if (fieldSet == std::set<std::string>({CCAPI_EM_PRIVATE_TRADE})) {
+    wsConnectionPtr->appendUrlPart("&eventTypeFilter=fill");
+  }
+  if (!instrumentSet.empty()) {
+    for (const auto& instrument : instrumentSet) {
+      wsConnectionPtr->appendUrlPart("&symbolFilter=" + instrument);
+    }
+  }
+  wsConnectionPtr->appendUrlPart("&apiSessionFilter=" + apiKey);
+  wsConnectionPtr->headers.insert({"X-GEMINI-APIKEY", apiKey});
+  int64_t nonce = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+  std::string payload = R"({"request":"/v1/order/events","nonce":)" + std::to_string(nonce) + "}";
+  auto base64Payload = UtilAlgorithm::base64Encode(payload);
+  wsConnectionPtr->headers.insert({"X-GEMINI-PAYLOAD", base64Payload});
+  auto apiSecret = mapGetWithDefault(credential, this->apiSecretName);
+  auto signature = Hmac::hmac(Hmac::ShaVersion::SHA384, apiSecret, base64Payload, true);
+  wsConnectionPtr->headers.insert({"X-GEMINI-SIGNATURE", signature});
+  this->connect(wsConnectionPtr);
+}
 #endif
 #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
   void onTextMessage(wspp::connection_hdl hdl, const std::string& textMessage, const TimePoint& timeReceived) override {

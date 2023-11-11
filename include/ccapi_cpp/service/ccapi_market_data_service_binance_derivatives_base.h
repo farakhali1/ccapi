@@ -6,15 +6,21 @@
 namespace ccapi {
 class MarketDataServiceBinanceDerivativesBase : public MarketDataServiceBinanceBase {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   MarketDataServiceBinanceDerivativesBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                           ServiceContext* serviceContextPtr, emumba::connector::io_handler& io)
       : MarketDataServiceBinanceBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+#else
+  MarketDataServiceBinanceDerivativesBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                                          std::shared_ptr<ServiceContext> serviceContextPtr)
+      : MarketDataServiceBinanceBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
     this->isDerivatives = true;
   }
   virtual ~MarketDataServiceBinanceDerivativesBase() {}
 #ifndef CCAPI_EXPOSE_INTERNAL
 
- protected:
+protected:
 #endif
   void prepareSubscriptionDetail(std::string& channelId, std::string& symbolId, const std::string& field, const WsConnection& wsConnection,
                                  const Subscription& subscription, const std::map<std::string, std::string> optionMap) override {
@@ -118,17 +124,34 @@ class MarketDataServiceBinanceDerivativesBase : public MarketDataServiceBinanceB
         for (const auto& x : document["symbols"].GetArray()) {
           Element element;
           this->extractInstrumentInfo(element, x);
-          elementList.push_back(element);
+          message.setElementList({element});
+          break;
         }
-        message.setElementList(elementList);
-        message.setCorrelationIdList({request.getCorrelationId()});
-        event.addMessages({message});
-      } break;
-      default:
-        MarketDataServiceBinanceBase::convertTextMessageToMarketDataMessage(request, textMessage, timeReceived, event, marketDataMessageList);
-    }
+      }
+      message.setCorrelationIdList({request.getCorrelationId()});
+      event.addMessages({message});
+    } break;
+    case Request::Operation::GET_INSTRUMENTS: {
+      rj::Document document;
+      document.Parse<rj::kParseNumbersAsStringsFlag>(textMessage.c_str());
+      Message message;
+      message.setTimeReceived(timeReceived);
+      message.setType(this->requestOperationToMessageTypeMap.at(request.getOperation()));
+      std::vector<Element> elementList;
+      for (const auto& x : document["symbols"].GetArray()) {
+        Element element;
+        this->extractInstrumentInfo(element, x);
+        elementList.push_back(element);
+      }
+      message.setElementList(elementList);
+      message.setCorrelationIdList({request.getCorrelationId()});
+      event.addMessages({message});
+    } break;
+    default:
+      MarketDataServiceBinanceBase::convertTextMessageToMarketDataMessage(request, textMessage, timeReceived, event, marketDataMessageList);
   }
-};
+}
+};  // namespace ccapi
 } /* namespace ccapi */
 #endif
 #endif

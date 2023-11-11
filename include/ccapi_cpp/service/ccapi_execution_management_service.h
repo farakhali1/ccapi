@@ -27,9 +27,15 @@ class ExecutionManagementService : public Service {
     BOOLEAN,
     // DOUBLE, shouldn't be needed because double in a json response needs to parsed as string to preserve its precision
   };
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   ExecutionManagementService(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                              ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
       : Service(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io), _io(io) {
+#else
+  ExecutionManagementService(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                             ServiceContextPtr serviceContextPtr)
+      : Service(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
     this->requestOperationToMessageTypeMap = {
         {Request::Operation::CREATE_ORDER, Message::Type::CREATE_ORDER},
         {Request::Operation::CANCEL_ORDER, Message::Type::CANCEL_ORDER},
@@ -287,49 +293,49 @@ class ExecutionManagementService : public Service {
   virtual void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, const Subscription& subscription, boost::beast::string_view textMessageView,
                              const TimePoint& timeReceived) {}
 #else
-  virtual void logonToExchange(std::shared_ptr<WsConnection> wsConnectionPtr, const TimePoint& now, const std::map<std::string, std::string>& credential) {
-    CCAPI_LOGGER_INFO("about to logon to exchange");
-    CCAPI_LOGGER_INFO("exchange is " + this->exchangeName);
-    WsConnection& wsConnection = *wsConnectionPtr;
-    auto subscription = wsConnection.subscriptionList.at(0);
-    std::vector<std::string> sendStringList = this->createSendStringListFromSubscription(wsConnection, subscription, now, credential);
-    for (const auto& sendString : sendStringList) {
-      CCAPI_LOGGER_INFO("sendString = " + sendString);
-      ErrorCode ec;
-      this->send(wsConnectionPtr, sendString, ec);
-      if (ec) {
-        this->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::SUBSCRIPTION_FAILURE, ec, "subscribe");
-      }
+virtual void logonToExchange(std::shared_ptr<WsConnection> wsConnectionPtr, const TimePoint& now, const std::map<std::string, std::string>& credential) {
+  CCAPI_LOGGER_INFO("about to logon to exchange");
+  CCAPI_LOGGER_INFO("exchange is " + this->exchangeName);
+  WsConnection& wsConnection = *wsConnectionPtr;
+  auto subscription = wsConnection.subscriptionList.at(0);
+  std::vector<std::string> sendStringList = this->createSendStringListFromSubscription(wsConnection, subscription, now, credential);
+  for (const auto& sendString : sendStringList) {
+    CCAPI_LOGGER_INFO("sendString = " + sendString);
+    ErrorCode ec;
+    this->send(wsConnectionPtr, sendString, ec);
+    if (ec) {
+      this->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::SUBSCRIPTION_FAILURE, ec, "subscribe");
     }
   }
-  void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view textMessageView, const TimePoint& timeReceived) override {
-    auto subscription = wsConnectionPtr->subscriptionList.at(0);
-    this->onTextMessage(wsConnectionPtr, subscription, textMessageView, timeReceived);
-    this->onPongByMethod(PingPongMethod::WEBSOCKET_APPLICATION_LEVEL, wsConnectionPtr, timeReceived, false);
+}
+void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view textMessageView, const TimePoint& timeReceived) override {
+  auto subscription = wsConnectionPtr->subscriptionList.at(0);
+  this->onTextMessage(wsConnectionPtr, subscription, textMessageView, timeReceived);
+  this->onPongByMethod(PingPongMethod::WEBSOCKET_APPLICATION_LEVEL, wsConnectionPtr, timeReceived);
+}
+void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override {
+  CCAPI_LOGGER_FUNCTION_ENTER;
+  Service::onOpen(wsConnectionPtr);
+  auto now = UtilTime::now();
+  WsConnection& wsConnection = *wsConnectionPtr;
+  auto correlationId = wsConnection.subscriptionList.at(0).getCorrelationId();
+  this->wsConnectionByCorrelationIdMap.insert({correlationId, wsConnectionPtr});
+  this->correlationIdByConnectionIdMap.insert({wsConnection.id, correlationId});
+  auto credential = wsConnection.credential;
+  this->logonToExchange(wsConnectionPtr, now, credential);
+}
+void onClose(std::shared_ptr<WsConnection> wsConnectionPtr, ErrorCode ec) override {
+  CCAPI_LOGGER_FUNCTION_ENTER;
+  WsConnection& wsConnection = *wsConnectionPtr;
+  if (this->correlationIdByConnectionIdMap.find(wsConnection.id) != this->correlationIdByConnectionIdMap.end()) {
+    this->wsConnectionByCorrelationIdMap.erase(this->correlationIdByConnectionIdMap.at(wsConnection.id));
+    this->correlationIdByConnectionIdMap.erase(wsConnection.id);
   }
-  void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override {
-    CCAPI_LOGGER_FUNCTION_ENTER;
-    Service::onOpen(wsConnectionPtr);
-    auto now = UtilTime::now();
-    WsConnection& wsConnection = *wsConnectionPtr;
-    auto correlationId = wsConnection.subscriptionList.at(0).getCorrelationId();
-    this->wsConnectionByCorrelationIdMap.insert({correlationId, wsConnectionPtr});
-    this->correlationIdByConnectionIdMap.insert({wsConnection.id, correlationId});
-    auto credential = wsConnection.credential;
-    this->logonToExchange(wsConnectionPtr, now, credential);
-  }
-  void onClose(std::shared_ptr<WsConnection> wsConnectionPtr, ErrorCode ec) override {
-    CCAPI_LOGGER_FUNCTION_ENTER;
-    WsConnection& wsConnection = *wsConnectionPtr;
-    if (this->correlationIdByConnectionIdMap.find(wsConnection.id) != this->correlationIdByConnectionIdMap.end()) {
-      this->wsConnectionByCorrelationIdMap.erase(this->correlationIdByConnectionIdMap.at(wsConnection.id));
-      this->correlationIdByConnectionIdMap.erase(wsConnection.id);
-    }
-    this->wsRequestIdByConnectionIdMap.erase(wsConnection.id);
-    Service::onClose(wsConnectionPtr, ec);
-  }
-  virtual void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, const Subscription& subscription, boost::beast::string_view textMessageView,
-                             const TimePoint& timeReceived) {}
+  this->wsRequestIdByConnectionIdMap.erase(wsConnection.id);
+  Service::onClose(wsConnectionPtr, ec);
+}
+virtual void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, const Subscription& subscription, boost::beast::string_view textMessageView,
+                           const TimePoint& timeReceived) {}
 #endif
   void convertRequestForRestGenericPrivateRequest(http::request<http::string_body>& req, const Request& request, const TimePoint& now,
                                                   const std::string& symbolId, const std::map<std::string, std::string>& credential) {
@@ -451,7 +457,9 @@ class ExecutionManagementService : public Service {
       wsConnectionByCorrelationIdMap;  // TODO(cryptochassis): for consistency, to be renamed to wsConnectionPtrByCorrelationIdMap
 #endif
   std::map<std::string, int> wsRequestIdByConnectionIdMap;
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   emumba::connector::io_handler& _io;
+#endif
   uint _ws_id = 0;
 };
 } /* namespace ccapi */

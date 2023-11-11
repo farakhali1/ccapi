@@ -6,9 +6,15 @@
 namespace ccapi {
 class MarketDataServiceHuobiBase : public MarketDataService {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   MarketDataServiceHuobiBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                              ServiceContext* serviceContextPtr, emumba::connector::io_handler& io)
       : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+#else
+  MarketDataServiceHuobiBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                             std::shared_ptr<ServiceContext> serviceContextPtr)
+      : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
     this->needDecompressWebsocketMessage = true;
 #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
     ErrorCode ec = this->inflater.init(false, 31);

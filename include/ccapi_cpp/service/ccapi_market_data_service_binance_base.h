@@ -7,9 +7,15 @@
 namespace ccapi {
 class MarketDataServiceBinanceBase : public MarketDataService {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   MarketDataServiceBinanceBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                ServiceContext* serviceContextPtr, emumba::connector::io_handler& io)
       : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+#else
+  MarketDataServiceBinanceBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                               std::shared_ptr<ServiceContext> serviceContextPtr)
+      : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
     this->enableCheckPingPongWebsocketApplicationLevel = false;
   }
   virtual ~MarketDataServiceBinanceBase() {}
@@ -34,12 +40,12 @@ class MarketDataServiceBinanceBase : public MarketDataService {
     this->startSubscribe(wsConnectionPtr);
   }
 #else
-  void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override {
-    CCAPI_LOGGER_FUNCTION_ENTER;
-    auto now = UtilTime::now();
-    Service::onOpen(wsConnectionPtr);
-    this->startSubscribe(wsConnectionPtr);
-  }
+void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override {
+  CCAPI_LOGGER_FUNCTION_ENTER;
+  auto now = UtilTime::now();
+  Service::onOpen(wsConnectionPtr);
+  this->startSubscribe(wsConnectionPtr);
+}
 #endif
   void prepareSubscriptionDetail(std::string& channelId, std::string& symbolId, const std::string& field, const WsConnection& wsConnection,
                                  const Subscription& subscription, const std::map<std::string, std::string> optionMap) override {

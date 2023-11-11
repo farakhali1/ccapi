@@ -6,9 +6,15 @@
 namespace ccapi {
 class ExecutionManagementServiceFtxBase : public ExecutionManagementService {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   ExecutionManagementServiceFtxBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                     ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
       : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+#else
+  ExecutionManagementServiceFtxBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                                    ServiceContextPtr serviceContextPtr)
+      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
     this->createOrderTarget = "/api/orders";
     this->cancelOrderTarget = "/api/orders";
     this->getOrderTarget = "/api/orders";

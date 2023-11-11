@@ -6,42 +6,48 @@
 namespace ccapi {
 class ExecutionManagementServiceBinanceUsdsFutures : public ExecutionManagementServiceBinanceDerivativesBase {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   ExecutionManagementServiceBinanceUsdsFutures(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions,
                                                SessionConfigs sessionConfigs, ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
-      : ExecutionManagementServiceBinanceDerivativesBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
-    this->exchangeName = CCAPI_EXCHANGE_NAME_BINANCE_USDS_FUTURES;
-    this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/ws";
-    this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
-    this->setHostRestFromUrlRest(this->baseUrlRest);
-    this->setHostWsFromUrlWs(this->baseUrlWs);
-    //     try {
-    //       this->tcpResolverResultsRest = this->resolver.resolve(this->hostRest, this->portRest);
-    //     } catch (const std::exception& e) {
-    //       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
-    //     }
-    // #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
-    // #else
-    //     try {
-    //       this->tcpResolverResultsWs = this->resolverWs.resolve(this->hostWs, this->portWs);
-    //     } catch (const std::exception& e) {
-    //       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
-    //     }
-    // #endif
-    this->apiKeyName = CCAPI_BINANCE_USDS_FUTURES_API_KEY;
-    this->apiSecretName = CCAPI_BINANCE_USDS_FUTURES_API_SECRET;
-    this->setupCredential({this->apiKeyName, this->apiSecretName});
-    this->createOrderTarget = CCAPI_BINANCE_USDS_FUTURES_CREATE_ORDER_PATH;
-    this->cancelOrderTarget = "/fapi/v1/order";
-    this->getOrderTarget = "/fapi/v1/order";
-    this->getOpenOrdersTarget = "/fapi/v1/openOrders";
-    this->cancelOpenOrdersTarget = "/fapi/v1/allOpenOrders";
-    this->isDerivatives = true;
-    this->listenKeyTarget = CCAPI_BINANCE_USDS_FUTURES_LISTEN_KEY_PATH;
-    this->getAccountBalancesTarget = "/fapi/v2/account";
-    this->getAccountPositionsTarget = "/fapi/v2/positionRisk";
-  }
-  virtual ~ExecutionManagementServiceBinanceUsdsFutures() {}
-};
+      : ExecutionManagementServiceBinanceDerivativesBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io){
+#else
+  ExecutionManagementServiceBinanceUsdsFutures(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions,
+                                               SessionConfigs sessionConfigs, ServiceContextPtr serviceContextPtr)
+      : ExecutionManagementServiceBinanceDerivativesBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
+            this->exchangeName = CCAPI_EXCHANGE_NAME_BINANCE_USDS_FUTURES;
+  this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/ws";
+  this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
+  this->setHostRestFromUrlRest(this->baseUrlRest);
+  this->setHostWsFromUrlWs(this->baseUrlWs);
+  //     try {
+  //       this->tcpResolverResultsRest = this->resolver.resolve(this->hostRest, this->portRest);
+  //     } catch (const std::exception& e) {
+  //       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
+  //     }
+  // #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
+  // #else
+  //     try {
+  //       this->tcpResolverResultsWs = this->resolverWs.resolve(this->hostWs, this->portWs);
+  //     } catch (const std::exception& e) {
+  //       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
+  //     }
+  // #endif
+  this->apiKeyName = CCAPI_BINANCE_USDS_FUTURES_API_KEY;
+  this->apiSecretName = CCAPI_BINANCE_USDS_FUTURES_API_SECRET;
+  this->setupCredential({this->apiKeyName, this->apiSecretName});
+  this->createOrderTarget = CCAPI_BINANCE_USDS_FUTURES_CREATE_ORDER_PATH;
+  this->cancelOrderTarget = "/fapi/v1/order";
+  this->getOrderTarget = "/fapi/v1/order";
+  this->getOpenOrdersTarget = "/fapi/v1/openOrders";
+  this->cancelOpenOrdersTarget = "/fapi/v1/allOpenOrders";
+  this->isDerivatives = true;
+  this->listenKeyTarget = CCAPI_BINANCE_USDS_FUTURES_LISTEN_KEY_PATH;
+  this->getAccountBalancesTarget = "/fapi/v2/account";
+  this->getAccountPositionsTarget = "/fapi/v2/positionRisk";
+} virtual ~ExecutionManagementServiceBinanceUsdsFutures() {
+}
+};  // namespace ccapi
 } /* namespace ccapi */
 #endif
 #endif

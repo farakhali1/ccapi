@@ -16,9 +16,15 @@ namespace ccapi {
  */
 class MarketDataService : public Service {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   MarketDataService(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                     ServiceContext* serviceContextPtr, emumba::connector::io_handler& io)
       : Service(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io), _io(io) {
+#else
+  MarketDataService(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                    std::shared_ptr<ServiceContext> serviceContextPtr)
+      : Service(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
     CCAPI_LOGGER_FUNCTION_ENTER;
     this->requestOperationToMessageTypeMap = {
         {Request::Operation::GET_RECENT_TRADES, Message::Type::GET_RECENT_TRADES},
@@ -163,66 +169,66 @@ class MarketDataService : public Service {
     CCAPI_LOGGER_FUNCTION_EXIT;
   }
 #else
-  // subscriptions are grouped and each group creates a unique websocket connection
-  void subscribe(std::vector<Subscription>& subscriptionList) override {
-    CCAPI_LOGGER_FUNCTION_ENTER;
-    CCAPI_LOGGER_DEBUG("this->baseUrlWs = " + this->baseUrlWs);
-    if (this->shouldContinue.load()) {
-      for (auto& x : this->groupSubscriptionListByInstrumentGroup(subscriptionList)) {
-        auto instrumentGroup = x.first;
-        auto subscriptionListGivenInstrumentGroup = x.second;
-        boost::asio::post(*this->serviceContextPtr->ioContextPtr, [that = shared_from_base<MarketDataService>(), instrumentGroup,
-                                                                   subscriptionListGivenInstrumentGroup]() mutable {
-          auto now = UtilTime::now();
-          for (auto& subscription : subscriptionListGivenInstrumentGroup) {
-            subscription.setTimeSent(now);
-          }
-          std::map<std::string, std::vector<std::string>> wsConnectionIdListByInstrumentGroupMap = invertMapMulti(that->instrumentGroupByWsConnectionIdMap);
-          if (wsConnectionIdListByInstrumentGroupMap.find(instrumentGroup) != wsConnectionIdListByInstrumentGroupMap.end() &&
-              that->subscriptionStatusByInstrumentGroupInstrumentMap.find(instrumentGroup) != that->subscriptionStatusByInstrumentGroupInstrumentMap.end()) {
-            auto wsConnectionId = wsConnectionIdListByInstrumentGroupMap.at(instrumentGroup).at(0);
-            auto wsConnectionPtr = that->wsConnectionByIdMap.at(wsConnectionId);
-            WsConnection& wsConnection = *wsConnectionPtr;
-            for (const auto& subscription : subscriptionListGivenInstrumentGroup) {
-              auto instrument = subscription.getInstrument();
-              if (that->subscriptionStatusByInstrumentGroupInstrumentMap[instrumentGroup].find(instrument) !=
-                  that->subscriptionStatusByInstrumentGroupInstrumentMap[instrumentGroup].end()) {
-                that->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::SUBSCRIPTION_FAILURE, "already subscribed: " + toString(subscription));
-                return;
-              }
-              wsConnection.subscriptionList.push_back(subscription);
-              that->subscriptionStatusByInstrumentGroupInstrumentMap[instrumentGroup][instrument] = Subscription::Status::SUBSCRIBING;
-              that->prepareSubscription(wsConnection, subscription);
-            }
-            CCAPI_LOGGER_INFO("about to subscribe to exchange");
-            that->subscribeToExchange(wsConnectionPtr);
-          } else {
-            auto url = UtilString::split(instrumentGroup, "|").at(0);
-            auto credential = subscriptionListGivenInstrumentGroup.at(0).getCredential();
-            if (credential.empty()) {
-              credential = that->credentialDefault;
-            }
-            std::shared_ptr<beast::websocket::stream<beast::ssl_stream<beast::tcp_stream>>> streamPtr(nullptr);
-            try {
-              streamPtr = that->createWsStream(that->serviceContextPtr->ioContextPtr, that->serviceContextPtr->sslContextPtr);
-            } catch (const beast::error_code& ec) {
-              CCAPI_LOGGER_TRACE("fail");
-              std::vector<std::string> correlationIdList;
-              correlationIdList.reserve(subscriptionListGivenInstrumentGroup.size());
-              std::transform(subscriptionListGivenInstrumentGroup.cbegin(), subscriptionListGivenInstrumentGroup.cend(), std::back_inserter(correlationIdList),
-                             [](Subscription subscription) { return subscription.getCorrelationId(); });
-              that->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::SUBSCRIPTION_FAILURE, ec, "create stream", correlationIdList);
+// subscriptions are grouped and each group creates a unique websocket connection
+void subscribe(std::vector<Subscription>& subscriptionList) override {
+  CCAPI_LOGGER_FUNCTION_ENTER;
+  CCAPI_LOGGER_DEBUG("this->baseUrlWs = " + this->baseUrlWs);
+  if (this->shouldContinue.load()) {
+    for (auto& x : this->groupSubscriptionListByInstrumentGroup(subscriptionList)) {
+      auto instrumentGroup = x.first;
+      auto subscriptionListGivenInstrumentGroup = x.second;
+      boost::asio::post(*this->serviceContextPtr->ioContextPtr, [that = shared_from_base<MarketDataService>(), instrumentGroup,
+                                                                 subscriptionListGivenInstrumentGroup]() mutable {
+        auto now = UtilTime::now();
+        for (auto& subscription : subscriptionListGivenInstrumentGroup) {
+          subscription.setTimeSent(now);
+        }
+        std::map<std::string, std::vector<std::string>> wsConnectionIdListByInstrumentGroupMap = invertMapMulti(that->instrumentGroupByWsConnectionIdMap);
+        if (wsConnectionIdListByInstrumentGroupMap.find(instrumentGroup) != wsConnectionIdListByInstrumentGroupMap.end() &&
+            that->subscriptionStatusByInstrumentGroupInstrumentMap.find(instrumentGroup) != that->subscriptionStatusByInstrumentGroupInstrumentMap.end()) {
+          auto wsConnectionId = wsConnectionIdListByInstrumentGroupMap.at(instrumentGroup).at(0);
+          auto wsConnectionPtr = that->wsConnectionByIdMap.at(wsConnectionId);
+          WsConnection& wsConnection = *wsConnectionPtr;
+          for (const auto& subscription : subscriptionListGivenInstrumentGroup) {
+            auto instrument = subscription.getInstrument();
+            if (that->subscriptionStatusByInstrumentGroupInstrumentMap[instrumentGroup].find(instrument) !=
+                that->subscriptionStatusByInstrumentGroupInstrumentMap[instrumentGroup].end()) {
+              that->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::SUBSCRIPTION_FAILURE, "already subscribed: " + toString(subscription));
               return;
             }
-            std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(url, instrumentGroup, subscriptionListGivenInstrumentGroup, credential, streamPtr));
-            CCAPI_LOGGER_WARN("about to subscribe with new wsConnectionPtr " + toString(*wsConnectionPtr));
-            that->prepareConnect(wsConnectionPtr);
+            wsConnection.subscriptionList.push_back(subscription);
+            that->subscriptionStatusByInstrumentGroupInstrumentMap[instrumentGroup][instrument] = Subscription::Status::SUBSCRIBING;
+            that->prepareSubscription(wsConnection, subscription);
           }
-        });
-      }
+          CCAPI_LOGGER_INFO("about to subscribe to exchange");
+          that->subscribeToExchange(wsConnectionPtr);
+        } else {
+          auto url = UtilString::split(instrumentGroup, "|").at(0);
+          auto credential = subscriptionListGivenInstrumentGroup.at(0).getCredential();
+          if (credential.empty()) {
+            credential = that->credentialDefault;
+          }
+          std::shared_ptr<beast::websocket::stream<beast::ssl_stream<beast::tcp_stream>>> streamPtr(nullptr);
+          try {
+            streamPtr = that->createWsStream(that->serviceContextPtr->ioContextPtr, that->serviceContextPtr->sslContextPtr);
+          } catch (const beast::error_code& ec) {
+            CCAPI_LOGGER_TRACE("fail");
+            std::vector<std::string> correlationIdList;
+            correlationIdList.reserve(subscriptionListGivenInstrumentGroup.size());
+            std::transform(subscriptionListGivenInstrumentGroup.cbegin(), subscriptionListGivenInstrumentGroup.cend(), std::back_inserter(correlationIdList),
+                           [](Subscription subscription) { return subscription.getCorrelationId(); });
+            that->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::SUBSCRIPTION_FAILURE, ec, "create stream", correlationIdList);
+            return;
+          }
+          std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(url, instrumentGroup, subscriptionListGivenInstrumentGroup, credential, streamPtr));
+          CCAPI_LOGGER_WARN("about to subscribe with new wsConnectionPtr " + toString(*wsConnectionPtr));
+          that->prepareConnect(wsConnectionPtr);
+        }
+      });
     }
-    CCAPI_LOGGER_FUNCTION_EXIT;
   }
+  CCAPI_LOGGER_FUNCTION_EXIT;
+}
 #endif
 #ifndef CCAPI_EXPOSE_INTERNAL
 
@@ -849,23 +855,24 @@ class MarketDataService : public Service {
                 return;
               }
             }
-            if (this->sessionOptions.enableCheckOrderBookCrossed) {
-              bool shouldProcessRemainingMessage = true;
-              if (!this->checkOrderBookCrossed(snapshotBid, snapshotAsk, shouldProcessRemainingMessage)) {
-                CCAPI_LOGGER_ERROR("lastNToString(snapshotBid, 1) = " + lastNToString(snapshotBid, 1));
-                CCAPI_LOGGER_ERROR("firstNToString(snapshotAsk, 1) = " + firstNToString(snapshotAsk, 1));
-                this->onIncorrectStatesFound(wsConnectionPtr, textMessage, timeReceived, exchangeSubscriptionId, "order book crossed market found");
-              }
-              if (!shouldProcessRemainingMessage) {
-                return;
-              }
+            if (!shouldProcessRemainingMessage) {
+              return;
             }
-          } else if (marketDataMessage.recapType == MarketDataMessage::RecapType::SOLICITED) {
-            this->processOrderBookInitial(wsConnection, channelId, symbolId, event, marketDataMessage.tp, timeReceived, marketDataMessage.data, field,
-                                          optionMap, correlationIdList, snapshotBid, snapshotAsk);
           }
-          CCAPI_LOGGER_TRACE("snapshotBid.size() = " + toString(snapshotBid.size()));
-          CCAPI_LOGGER_TRACE("snapshotAsk.size() = " + toString(snapshotAsk.size()));
+          if (this->sessionOptions.enableCheckOrderBookCrossed) {
+            bool shouldProcessRemainingMessage = true;
+            if (!this->checkOrderBookCrossed(snapshotBid, snapshotAsk, shouldProcessRemainingMessage)) {
+              CCAPI_LOGGER_ERROR("lastNToString(snapshotBid, 1) = " + lastNToString(snapshotBid, 1));
+              CCAPI_LOGGER_ERROR("firstNToString(snapshotAsk, 1) = " + firstNToString(snapshotAsk, 1));
+              this->onIncorrectStatesFound(wsConnectionPtr, textMessage, timeReceived, exchangeSubscriptionId, "order book crossed market found");
+            }
+            if (!shouldProcessRemainingMessage) {
+              return;
+            }
+          }
+        } else if (marketDataMessage.recapType == MarketDataMessage::RecapType::SOLICITED) {
+          this->processOrderBookInitial(wsConnection, channelId, symbolId, event, marketDataMessage.tp, timeReceived, marketDataMessage.data, field, optionMap,
+                                        correlationIdList, snapshotBid, snapshotAsk);
         }
         if (marketDataMessage.data.find(MarketDataMessage::DataType::TRADE) != marketDataMessage.data.end() ||
             marketDataMessage.data.find(MarketDataMessage::DataType::AGG_TRADE) != marketDataMessage.data.end()) {
@@ -882,31 +889,28 @@ class MarketDataService : public Service {
         CCAPI_LOGGER_WARN("websocket event type is unknown for " + toString(marketDataMessage));
         CCAPI_LOGGER_WARN("textMessage is " + std::string(textMessage));
       }
-    }
-  }
-  void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view textMessage, const TimePoint& timeReceived) override {
-    CCAPI_LOGGER_FUNCTION_ENTER;
-    if (this->correlationIdByConnectionIdMap.find(wsConnectionPtr->id) == this->correlationIdByConnectionIdMap.end()) {
-      Event event;
-      std::vector<MarketDataMessage> marketDataMessageList;
-      this->processTextMessage(wsConnectionPtr, textMessage, timeReceived, event, marketDataMessageList);
-      if (!marketDataMessageList.empty()) {
-        this->processMarketDataMessageList(wsConnectionPtr, textMessage, timeReceived, event, marketDataMessageList);
-      }
-      if (!event.getMessageList().empty()) {
-        this->eventHandler(event, nullptr);
+      if (marketDataMessage.data.find(MarketDataMessage::DataType::TRADE) != marketDataMessage.data.end() ||
+          marketDataMessage.data.find(MarketDataMessage::DataType::AGG_TRADE) != marketDataMessage.data.end()) {
+        bool isSolicited = marketDataMessage.recapType == MarketDataMessage::RecapType::SOLICITED;
+        this->processTrade(wsConnection, channelId, symbolId, event, marketDataMessage.tp, timeReceived, marketDataMessage.data, field, optionMap,
+                           correlationIdList, isSolicited);
       }
     } else {
-      Event event;
-      event.setType(Event::Type::SUBSCRIPTION_DATA);
-      Message message;
-      message.setType(Message::Type::GENERIC_PUBLIC_SUBSCRIPTION);
-      message.setTimeReceived(timeReceived);
-      message.setCorrelationIdList({this->correlationIdByConnectionIdMap.at(wsConnectionPtr->id)});
-      Element element;
-      element.insert(CCAPI_WEBSOCKET_MESSAGE_PAYLOAD, std::string(textMessage));
-      message.setElementList({element});
-      event.setMessageList({message});
+      CCAPI_LOGGER_WARN("websocket event type is unknown for " + toString(marketDataMessage));
+      CCAPI_LOGGER_WARN("textMessage is " + std::string(textMessage));
+    }
+  }
+}
+void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view textMessage, const TimePoint& timeReceived) override {
+  CCAPI_LOGGER_FUNCTION_ENTER;
+  if (this->correlationIdByConnectionIdMap.find(wsConnectionPtr->id) == this->correlationIdByConnectionIdMap.end()) {
+    Event event;
+    std::vector<MarketDataMessage> marketDataMessageList;
+    this->processTextMessage(wsConnectionPtr, textMessage, timeReceived, event, marketDataMessageList);
+    if (!marketDataMessageList.empty()) {
+      this->processMarketDataMessageList(wsConnectionPtr, textMessage, timeReceived, event, marketDataMessageList);
+    }
+    if (!event.getMessageList().empty()) {
       this->eventHandler(event, nullptr);
     }
     this->onPongByMethod(PingPongMethod::WEBSOCKET_APPLICATION_LEVEL, wsConnectionPtr, timeReceived, false);
@@ -919,8 +923,7 @@ class MarketDataService : public Service {
                                ", reason = " + reason;
     CCAPI_LOGGER_ERROR(errorMessage);
     ErrorCode ec;
-    this->close(wsConnectionPtr, beast::websocket::close_code::normal,
-                beast::websocket::close_reason(beast::websocket::close_code::normal, "incorrect states found: " + reason), ec);
+    this->send(wsConnectionPtr, sendString, ec);
     if (ec) {
       std::string& channelId =
           this->channelIdSymbolIdByConnectionIdExchangeSubscriptionIdMap.at(wsConnectionPtr->id).at(exchangeSubscriptionId).at(CCAPI_CHANNEL_ID);
@@ -935,24 +938,17 @@ class MarketDataService : public Service {
     this->shouldProcessRemainingMessageOnClosingByConnectionIdMap[wsConnectionPtr->id] = false;
     this->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::INCORRECT_STATE_FOUND, errorMessage);
   }
-  void connect(std::shared_ptr<WsConnection> wsConnectionPtr) override {
-    CCAPI_LOGGER_FUNCTION_ENTER;
-    Service::connect(wsConnectionPtr);
-    this->instrumentGroupByWsConnectionIdMap.insert(std::pair<std::string, std::string>(wsConnectionPtr->id, wsConnectionPtr->group));
-    CCAPI_LOGGER_DEBUG("this->instrumentGroupByWsConnectionIdMap = " + toString(this->instrumentGroupByWsConnectionIdMap));
-    CCAPI_LOGGER_FUNCTION_EXIT;
-  }
-  void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override {
-    CCAPI_LOGGER_FUNCTION_ENTER;
-    WsConnection& wsConnection = *wsConnectionPtr;
-    auto now = UtilTime::now();
-    Service::onOpen(wsConnectionPtr);
-    WsConnection thisWsConnection = wsConnection;
-    auto credential = wsConnection.credential;
-    if (!credential.empty()) {
-      this->logonToExchange(wsConnectionPtr, now, credential);
+}
+void startSubscribe(std::shared_ptr<WsConnection> wsConnectionPtr) {
+  WsConnection& wsConnection = *wsConnectionPtr;
+  auto instrumentGroup = wsConnection.group;
+  for (const auto& subscription : wsConnection.subscriptionList) {
+    auto instrument = subscription.getInstrument();
+    this->subscriptionStatusByInstrumentGroupInstrumentMap[instrumentGroup][instrument] = Subscription::Status::SUBSCRIBING;
+    if (subscription.getRawOptions().empty()) {
+      this->prepareSubscription(wsConnection, subscription);
     } else {
-      this->startSubscribe(wsConnectionPtr);
+      this->correlationIdByConnectionIdMap.insert({wsConnection.id, subscription.getCorrelationId()});
     }
   }
   void onFail_(std::shared_ptr<WsConnection> wsConnectionPtr) override {
@@ -1059,6 +1055,7 @@ class MarketDataService : public Service {
       }
     }
   }
+}
 #endif
   void updateOrderBook(std::map<Decimal, std::string>& snapshot, const Decimal& price, const std::string& size, bool sizeMayHaveTrailingZero = false) {
     auto it = snapshot.find(price);
@@ -2346,7 +2343,9 @@ class MarketDataService : public Service {
       marketDataMessageDataBufferByConnectionIdExchangeSubscriptionIdVersionIdMap;
   std::map<std::string, std::map<std::string, int64_t>> orderbookVersionIdByConnectionIdExchangeSubscriptionIdMap;
   std::map<std::string, std::map<std::string, TimerPtr>> fetchMarketDepthInitialSnapshotTimerByConnectionIdExchangeSubscriptionIdMap;
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   emumba::connector::io_handler& _io;
+#endif
   uint _ws_id = 0;
 };
 } /* namespace ccapi */

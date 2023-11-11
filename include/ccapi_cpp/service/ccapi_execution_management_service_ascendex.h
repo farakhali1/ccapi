@@ -6,9 +6,15 @@
 namespace ccapi {
 class ExecutionManagementServiceAscendex : public ExecutionManagementService {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   ExecutionManagementServiceAscendex(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                      ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
       : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io), _io(io) {
+#else
+  ExecutionManagementServiceAscendex(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                                     ServiceContextPtr serviceContextPtr)
+      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
     this->exchangeName = CCAPI_EXCHANGE_NAME_ASCENDEX;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName);
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
@@ -55,8 +61,8 @@ class ExecutionManagementServiceAscendex : public ExecutionManagementService {
   void pingOnApplicationLevel(std::shared_ptr<WsConnection> wsConnectionPtr) override { this->send(wsConnectionPtr, R"({"op":"ping"})"); }
   void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override { wsConnectionPtr->status = WsConnection::Status::OPEN; }
 #else
-  void pingOnApplicationLevel(std::shared_ptr<WsConnection> wsConnectionPtr, ErrorCode& ec) override { this->send(wsConnectionPtr, R"({"op":"ping"})", ec); }
-  void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override { wsConnectionPtr->status = WsConnection::Status::OPEN; }
+void pingOnApplicationLevel(std::shared_ptr<WsConnection> wsConnectionPtr, ErrorCode& ec) override { this->send(wsConnectionPtr, R"({"op":"ping"})", ec); }
+void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override { wsConnectionPtr->status = WsConnection::Status::OPEN; }
 #endif
   void signReqeustForRestGenericPrivateRequest(http::request<http::string_body>& req, const Request& request, std::string& methodString,
                                                std::string& headerString, std::string& path, std::string& queryString, std::string& body, const TimePoint& now,
@@ -552,7 +558,7 @@ class ExecutionManagementServiceAscendex : public ExecutionManagementService {
 #elif ENABLE_EPOLL_WS_CLIENT
           ExecutionManagementService::onOpen(wsConnectionPtr);
 #else
-        ExecutionManagementService::onOpen(wsConnectionPtr);
+      ExecutionManagementService::onOpen(wsConnectionPtr);
 #endif
         }
       }
@@ -561,7 +567,9 @@ class ExecutionManagementServiceAscendex : public ExecutionManagementService {
     return event;
   }
   std::string apiAccountGroupName;
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   emumba::connector::io_handler& _io;
+#endif
   uint _ws_id = 0;
 };
 } /* namespace ccapi */

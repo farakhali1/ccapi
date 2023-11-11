@@ -118,13 +118,17 @@ class Service : public std::enable_shared_from_this<Service> {
     }
     return output;
   }
+
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   Service(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
           ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
-      :
-#ifdef ENABLE_EPOLL_WS_CLIENT
-        _io(io),
+      : _io(io),
         _ws_rate_limit_timer(io),
         _http_rate_limit_timer(io),
+#else
+  Service(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+          ServiceContextPtr serviceContextPtr)
+      :
 #endif
         eventHandler(eventHandler),
         sessionOptions(sessionOptions),
@@ -484,7 +488,7 @@ class Service : public std::enable_shared_from_this<Service> {
   }
 #endif
 
-#ifdef ENABLE_EPOLL_HTTPS_CLIENT
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   void onHttpRateTimerExpiry() {
     CCAPI_LOGGER_INFO("Http Rate limit timer exhausted | buffered request: " + toString(httpBufferedRequests.size()));
     httpNumberOfRequests = httpActualNumberOfRequests;

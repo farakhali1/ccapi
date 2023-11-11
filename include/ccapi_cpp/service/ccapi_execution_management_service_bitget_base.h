@@ -6,9 +6,15 @@
 namespace ccapi {
 class ExecutionManagementServiceBitgetBase : public ExecutionManagementService {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   ExecutionManagementServiceBitgetBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                        ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
       : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+#else
+  ExecutionManagementServiceBitgetBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                                       ServiceContextPtr serviceContextPtr)
+      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
     this->hostHttpHeaderValueIgnorePort = true;
   }
   virtual ~ExecutionManagementServiceBitgetBase() {}

@@ -6,72 +6,105 @@
 namespace ccapi {
 class ExecutionManagementServiceKucoin : public ExecutionManagementServiceKucoinBase {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   ExecutionManagementServiceKucoin(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                    ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
-      : ExecutionManagementServiceKucoinBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
-    this->exchangeName = CCAPI_EXCHANGE_NAME_KUCOIN;
-    this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
-    this->setHostRestFromUrlRest(this->baseUrlRest);
-    // try {
-    //   this->tcpResolverResultsRest = this->resolver.resolve(this->hostRest, this->portRest);
-    // } catch (const std::exception& e) {
-    //   CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
-    // }
-    // #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
-    // #else
-    //     try {
-    //       this->tcpResolverResultsWs = this->resolverWs.resolve(this->hostWs, this->portWs);
-    //     } catch (const std::exception& e) {
-    //       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
-    //     }
-    // #endif
-    this->apiKeyName = CCAPI_KUCOIN_API_KEY;
-    this->apiSecretName = CCAPI_KUCOIN_API_SECRET;
-    this->apiPassphraseName = CCAPI_KUCOIN_API_PASSPHRASE;
-    this->setupCredential({this->apiKeyName, this->apiSecretName, this->apiPassphraseName});
-    this->createOrderTarget = "/api/v1/orders";
-    this->cancelOrderTarget = "/api/v1/orders/<id>";
-    this->getOrderTarget = "/api/v1/orders/<id>";
-    this->getOrderByClientOrderIdTarget = "/api/v1/order/client-order/<id>";
-    this->getOpenOrdersTarget = "/api/v1/orders";
-    this->cancelOpenOrdersTarget = "/api/v1/orders";
-    this->getAccountsTarget = "/api/v1/accounts";
-    this->getAccountBalancesTarget = "/api/v1/accounts/<accountId>";
-    this->topicTradeOrders = "/spotMarket/tradeOrders";
-    this->createOrderMarginTarget = "/api/v1/margin/order";
+      : ExecutionManagementServiceKucoinBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io){
+#else
+  ExecutionManagementServiceKucoin(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                                   ServiceContextPtr serviceContextPtr)
+      : ExecutionManagementServiceKucoinBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
+            // try {
+            //   this->tcpResolverResultsRest = this->resolver.resolve(this->hostRest, this->portRest);
+            // } catch (const std::exception& e) {
+            //   CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
+            // }
+            // #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
+            // #else
+            //     try {
+            //       this->tcpResolverResultsWs = this->resolverWs.resolve(this->hostWs, this->portWs);
+            //     } catch (const std::exception& e) {
+            //       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
+            //     }
+            // #endif
+            this->apiKeyName = CCAPI_KUCOIN_API_KEY;
+  this->apiSecretName = CCAPI_KUCOIN_API_SECRET;
+  this->apiPassphraseName = CCAPI_KUCOIN_API_PASSPHRASE;
+  this->setupCredential({this->apiKeyName, this->apiSecretName, this->apiPassphraseName});
+  this->createOrderTarget = "/api/v1/orders";
+  this->cancelOrderTarget = "/api/v1/orders/<id>";
+  this->getOrderTarget = "/api/v1/orders/<id>";
+  this->getOrderByClientOrderIdTarget = "/api/v1/order/client-order/<id>";
+  this->getOpenOrdersTarget = "/api/v1/orders";
+  this->cancelOpenOrdersTarget = "/api/v1/orders";
+  this->getAccountsTarget = "/api/v1/accounts";
+  this->getAccountBalancesTarget = "/api/v1/accounts/<accountId>";
+  this->topicTradeOrders = "/spotMarket/tradeOrders";
+  this->createOrderMarginTarget = "/api/v1/margin/order";
+  this->exchangeName = CCAPI_EXCHANGE_NAME_KUCOIN;
+  this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
+  this->setHostRestFromUrlRest(this->baseUrlRest);
+  try {
+    this->tcpResolverResultsRest = this->resolver.resolve(this->hostRest, this->portRest);
+  } catch (const std::exception& e) {
+    CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
   }
-  virtual ~ExecutionManagementServiceKucoin() {}
+  // #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
+  // #else
+  //     try {
+  //       this->tcpResolverResultsWs = this->resolverWs.resolve(this->hostWs, this->portWs);
+  //     } catch (const std::exception& e) {
+  //       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
+  //     }
+  // #endif
+  this->apiKeyName = CCAPI_KUCOIN_API_KEY;
+  this->apiSecretName = CCAPI_KUCOIN_API_SECRET;
+  this->apiPassphraseName = CCAPI_KUCOIN_API_PASSPHRASE;
+  this->setupCredential({this->apiKeyName, this->apiSecretName, this->apiPassphraseName});
+  this->createOrderTarget = "/api/v1/orders";
+  this->cancelOrderTarget = "/api/v1/orders/<id>";
+  this->getOrderTarget = "/api/v1/orders/<id>";
+  this->getOrderByClientOrderIdTarget = "/api/v1/order/client-order/<id>";
+  this->getOpenOrdersTarget = "/api/v1/orders";
+  this->cancelOpenOrdersTarget = "/api/v1/orders";
+  this->getAccountsTarget = "/api/v1/accounts";
+  this->getAccountBalancesTarget = "/api/v1/accounts/<accountId>";
+  this->topicTradeOrders = "/spotMarket/tradeOrders";
+  this->createOrderMarginTarget = "/api/v1/margin/order";
+} virtual ~ExecutionManagementServiceKucoin() {
+}
 #ifndef CCAPI_EXPOSE_INTERNAL
 
- protected:
+protected:
 #endif
-  void extractAccountInfoFromRequest(std::vector<Element>& elementList, const Request& request, const Request::Operation operation,
-                                     const rj::Document& document) override {
-    const auto& data = document["data"];
-    switch (request.getOperation()) {
-      case Request::Operation::GET_ACCOUNTS: {
-        for (const auto& x : data.GetArray()) {
-          Element element;
-          element.insert(CCAPI_EM_ACCOUNT_ID, x["id"].GetString());
-          element.insert(CCAPI_EM_ACCOUNT_TYPE, x["type"].GetString());
-          element.insert(CCAPI_EM_ASSET, x["currency"].GetString());
-          element.insert(CCAPI_EM_QUANTITY_TOTAL, x["balance"].GetString());
-          element.insert(CCAPI_EM_QUANTITY_AVAILABLE_FOR_TRADING, x["available"].GetString());
-          elementList.emplace_back(std::move(element));
-        }
-      } break;
-      case Request::Operation::GET_ACCOUNT_BALANCES: {
+void extractAccountInfoFromRequest(std::vector<Element>& elementList, const Request& request, const Request::Operation operation,
+                                   const rj::Document& document) override {
+  const auto& data = document["data"];
+  switch (request.getOperation()) {
+    case Request::Operation::GET_ACCOUNTS: {
+      for (const auto& x : data.GetArray()) {
         Element element;
-        element.insert(CCAPI_EM_ASSET, data["currency"].GetString());
-        element.insert(CCAPI_EM_QUANTITY_TOTAL, data["balance"].GetString());
-        element.insert(CCAPI_EM_QUANTITY_AVAILABLE_FOR_TRADING, data["available"].GetString());
+        element.insert(CCAPI_EM_ACCOUNT_ID, x["id"].GetString());
+        element.insert(CCAPI_EM_ACCOUNT_TYPE, x["type"].GetString());
+        element.insert(CCAPI_EM_ASSET, x["currency"].GetString());
+        element.insert(CCAPI_EM_QUANTITY_TOTAL, x["balance"].GetString());
+        element.insert(CCAPI_EM_QUANTITY_AVAILABLE_FOR_TRADING, x["available"].GetString());
         elementList.emplace_back(std::move(element));
-      } break;
-      default:
-        CCAPI_LOGGER_FATAL(CCAPI_UNSUPPORTED_VALUE);
-    }
+      }
+    } break;
+    case Request::Operation::GET_ACCOUNT_BALANCES: {
+      Element element;
+      element.insert(CCAPI_EM_ASSET, data["currency"].GetString());
+      element.insert(CCAPI_EM_QUANTITY_TOTAL, data["balance"].GetString());
+      element.insert(CCAPI_EM_QUANTITY_AVAILABLE_FOR_TRADING, data["available"].GetString());
+      elementList.emplace_back(std::move(element));
+    } break;
+    default:
+      CCAPI_LOGGER_FATAL(CCAPI_UNSUPPORTED_VALUE);
   }
-};
+}
+};  // namespace ccapi
 } /* namespace ccapi */
 #endif
 #endif

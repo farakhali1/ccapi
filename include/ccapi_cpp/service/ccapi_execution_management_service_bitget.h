@@ -6,9 +6,15 @@
 namespace ccapi {
 class ExecutionManagementServiceBitget : public ExecutionManagementServiceBitgetBase {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   ExecutionManagementServiceBitget(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                    ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
       : ExecutionManagementServiceBitgetBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+#else
+  ExecutionManagementServiceBitget(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                                   ServiceContextPtr serviceContextPtr)
+      : ExecutionManagementServiceBitgetBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
     this->exchangeName = CCAPI_EXCHANGE_NAME_BITGET;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/spot/v1/stream";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);

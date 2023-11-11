@@ -6,19 +6,25 @@
 namespace ccapi {
 class ExecutionManagementServiceFtx : public ExecutionManagementServiceFtxBase {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   ExecutionManagementServiceFtx(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                 ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
-      : ExecutionManagementServiceFtxBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
-    this->exchangeName = CCAPI_EXCHANGE_NAME_FTX;
-    this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/ws";
-    this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
-    this->setHostRestFromUrlRest(this->baseUrlRest);
-    this->setHostWsFromUrlWs(this->baseUrlWs);
-    try {
-      this->tcpResolverResultsRest = this->resolver.resolve(this->hostRest, this->portRest);
-    } catch (const std::exception& e) {
-      CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
-    }
+      : ExecutionManagementServiceFtxBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io){
+#else
+  ExecutionManagementServiceFtx(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                                ServiceContextPtr serviceContextPtr)
+      : ExecutionManagementServiceFtxBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
+            this->exchangeName = CCAPI_EXCHANGE_NAME_FTX;
+  this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/ws";
+  this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
+  this->setHostRestFromUrlRest(this->baseUrlRest);
+  this->setHostWsFromUrlWs(this->baseUrlWs);
+  try {
+    this->tcpResolverResultsRest = this->resolver.resolve(this->hostRest, this->portRest);
+  } catch (const std::exception& e) {
+    CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
+  }
 #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
 #else
     try {
@@ -27,51 +33,51 @@ class ExecutionManagementServiceFtx : public ExecutionManagementServiceFtxBase {
       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
     }
 #endif
-    this->apiKeyName = CCAPI_FTX_API_KEY;
-    this->apiSecretName = CCAPI_FTX_API_SECRET;
-    this->apiSubaccountName = CCAPI_FTX_API_SUBACCOUNT;
-    this->setupCredential({this->apiKeyName, this->apiSecretName, this->apiSubaccountName});
-    this->getAccountPositionsTarget = "/api/positions";
-    this->ftx = "FTX";
-  }
-  virtual ~ExecutionManagementServiceFtx() {}
+  this->apiKeyName = CCAPI_FTX_API_KEY;
+  this->apiSecretName = CCAPI_FTX_API_SECRET;
+  this->apiSubaccountName = CCAPI_FTX_API_SUBACCOUNT;
+  this->setupCredential({this->apiKeyName, this->apiSecretName, this->apiSubaccountName});
+  this->getAccountPositionsTarget = "/api/positions";
+  this->ftx = "FTX";
+} virtual ~ExecutionManagementServiceFtx() {
+}
 #ifndef CCAPI_EXPOSE_INTERNAL
 
- protected:
+protected:
 #endif
-  void convertRequestForRest(http::request<http::string_body>& req, const Request& request, const TimePoint& now, const std::string& symbolId,
-                             const std::map<std::string, std::string>& credential) override {
-    switch (request.getOperation()) {
-      case Request::Operation::GET_ACCOUNT_POSITIONS: {
-        this->prepareReq(req, now, credential);
-        req.method(http::verb::get);
-        const std::map<std::string, std::string> param = request.getFirstParamWithDefault();
-        auto target = this->getAccountPositionsTarget;
-        req.target(target);
-        this->signRequest(req, "", credential);
-      } break;
-      default:
-        ExecutionManagementServiceFtxBase::convertRequestForRest(req, request, now, symbolId, credential);
-    }
+void convertRequestForRest(http::request<http::string_body>& req, const Request& request, const TimePoint& now, const std::string& symbolId,
+                           const std::map<std::string, std::string>& credential) override {
+  switch (request.getOperation()) {
+    case Request::Operation::GET_ACCOUNT_POSITIONS: {
+      this->prepareReq(req, now, credential);
+      req.method(http::verb::get);
+      const std::map<std::string, std::string> param = request.getFirstParamWithDefault();
+      auto target = this->getAccountPositionsTarget;
+      req.target(target);
+      this->signRequest(req, "", credential);
+    } break;
+    default:
+      ExecutionManagementServiceFtxBase::convertRequestForRest(req, request, now, symbolId, credential);
   }
-  void extractAccountInfoFromRequest(std::vector<Element>& elementList, const Request& request, const Request::Operation operation,
-                                     const rj::Document& document) override {
-    switch (request.getOperation()) {
-      case Request::Operation::GET_ACCOUNT_POSITIONS: {
-        for (const auto& x : document["result"].GetArray()) {
-          Element element;
-          element.insert(CCAPI_INSTRUMENT, x["future"].GetString());
-          element.insert(CCAPI_EM_POSITION_SIDE, x["side"].GetString());
-          element.insert(CCAPI_EM_POSITION_QUANTITY, x["size"].GetString());
-          element.insert(CCAPI_EM_POSITION_COST, x["cost"].GetString());
-          elementList.emplace_back(std::move(element));
-        }
-      } break;
-      default:
-        ExecutionManagementServiceFtxBase::extractAccountInfoFromRequest(elementList, request, operation, document);
-    }
+}
+void extractAccountInfoFromRequest(std::vector<Element>& elementList, const Request& request, const Request::Operation operation,
+                                   const rj::Document& document) override {
+  switch (request.getOperation()) {
+    case Request::Operation::GET_ACCOUNT_POSITIONS: {
+      for (const auto& x : document["result"].GetArray()) {
+        Element element;
+        element.insert(CCAPI_INSTRUMENT, x["future"].GetString());
+        element.insert(CCAPI_EM_POSITION_SIDE, x["side"].GetString());
+        element.insert(CCAPI_EM_POSITION_QUANTITY, x["size"].GetString());
+        element.insert(CCAPI_EM_POSITION_COST, x["cost"].GetString());
+        elementList.emplace_back(std::move(element));
+      }
+    } break;
+    default:
+      ExecutionManagementServiceFtxBase::extractAccountInfoFromRequest(elementList, request, operation, document);
   }
-};
+}
+};  // namespace ccapi
 } /* namespace ccapi */
 #endif
 #endif

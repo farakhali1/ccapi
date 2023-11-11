@@ -6,9 +6,15 @@
 namespace ccapi {
 class MarketDataServiceDeribit : public MarketDataService {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   MarketDataServiceDeribit(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                            ServiceContext* serviceContextPtr, emumba::connector::io_handler& io)
       : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+#else
+  MarketDataServiceDeribit(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                           std::shared_ptr<ServiceContext> serviceContextPtr)
+      : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
     this->exchangeName = CCAPI_EXCHANGE_NAME_DERIBIT;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/ws/api/v2";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
@@ -90,30 +96,30 @@ class MarketDataServiceDeribit : public MarketDataService {
     MarketDataService::onClose(wsConnectionPtr, ec);
   }
 #else
-  void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override {
-    MarketDataService::onOpen(wsConnectionPtr);
-    rj::Document document;
-    document.SetObject();
-    rj::Document::AllocatorType& allocator = document.GetAllocator();
-    auto now = UtilTime::now();
-    this->appendParam(document, allocator, std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count(), "public/set_heartbeat",
-                      {
-                          {"interval", "10"},
-                      });
-    rj::StringBuffer stringBuffer;
-    rj::Writer<rj::StringBuffer> writer(stringBuffer);
-    document.Accept(writer);
-    std::string msg = stringBuffer.GetString();
-    ErrorCode ec;
-    this->send(wsConnectionPtr, msg, ec);
-    if (ec) {
-      this->onError(Event::Type::REQUEST_STATUS, Message::Type::REQUEST_FAILURE, ec, "request");
-    }
+void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override {
+  MarketDataService::onOpen(wsConnectionPtr);
+  rj::Document document;
+  document.SetObject();
+  rj::Document::AllocatorType& allocator = document.GetAllocator();
+  auto now = UtilTime::now();
+  this->appendParam(document, allocator, std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count(), "public/set_heartbeat",
+                    {
+                        {"interval", "10"},
+                    });
+  rj::StringBuffer stringBuffer;
+  rj::Writer<rj::StringBuffer> writer(stringBuffer);
+  document.Accept(writer);
+  std::string msg = stringBuffer.GetString();
+  ErrorCode ec;
+  this->send(wsConnectionPtr, msg, ec);
+  if (ec) {
+    this->onError(Event::Type::REQUEST_STATUS, Message::Type::REQUEST_FAILURE, ec, "request");
   }
-  void onClose(std::shared_ptr<WsConnection> wsConnectionPtr, ErrorCode ec) override {
-    this->subscriptionJsonrpcIdSetByConnectionIdMap.erase(wsConnectionPtr->id);
-    MarketDataService::onClose(wsConnectionPtr, ec);
-  }
+}
+void onClose(std::shared_ptr<WsConnection> wsConnectionPtr, ErrorCode ec) override {
+  this->subscriptionJsonrpcIdSetByConnectionIdMap.erase(wsConnectionPtr->id);
+  MarketDataService::onClose(wsConnectionPtr, ec);
+}
 #endif
   void prepareSubscriptionDetail(std::string& channelId, std::string& symbolId, const std::string& field, const WsConnection& wsConnection,
                                  const Subscription& subscription, const std::map<std::string, std::string> optionMap) override {

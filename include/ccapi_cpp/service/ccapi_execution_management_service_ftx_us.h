@@ -6,19 +6,25 @@
 namespace ccapi {
 class ExecutionManagementServiceFtxUs : public ExecutionManagementServiceFtxBase {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   ExecutionManagementServiceFtxUs(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                   ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
-      : ExecutionManagementServiceFtxBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
-    this->exchangeName = CCAPI_EXCHANGE_NAME_FTX_US;
-    this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/ws";
-    this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
-    this->setHostRestFromUrlRest(this->baseUrlRest);
-    this->setHostWsFromUrlWs(this->baseUrlWs);
-    try {
-      this->tcpResolverResultsRest = this->resolver.resolve(this->hostRest, this->portRest);
-    } catch (const std::exception& e) {
-      CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
-    }
+      : ExecutionManagementServiceFtxBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io){
+#else
+  ExecutionManagementServiceFtxUs(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                                  ServiceContextPtr serviceContextPtr)
+      : ExecutionManagementServiceFtxBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
+            this->exchangeName = CCAPI_EXCHANGE_NAME_FTX_US;
+  this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/ws";
+  this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
+  this->setHostRestFromUrlRest(this->baseUrlRest);
+  this->setHostWsFromUrlWs(this->baseUrlWs);
+  try {
+    this->tcpResolverResultsRest = this->resolver.resolve(this->hostRest, this->portRest);
+  } catch (const std::exception& e) {
+    CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
+  }
 #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
 #else
     try {
@@ -27,14 +33,14 @@ class ExecutionManagementServiceFtxUs : public ExecutionManagementServiceFtxBase
       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
     }
 #endif
-    this->apiKeyName = CCAPI_FTX_US_API_KEY;
-    this->apiSecretName = CCAPI_FTX_US_API_SECRET;
-    this->apiSubaccountName = CCAPI_FTX_US_API_SUBACCOUNT;
-    this->setupCredential({this->apiKeyName, this->apiSecretName, this->apiSubaccountName});
-    this->ftx = "FTXUS";
-  }
-  virtual ~ExecutionManagementServiceFtxUs() {}
-};
+  this->apiKeyName = CCAPI_FTX_US_API_KEY;
+  this->apiSecretName = CCAPI_FTX_US_API_SECRET;
+  this->apiSubaccountName = CCAPI_FTX_US_API_SUBACCOUNT;
+  this->setupCredential({this->apiKeyName, this->apiSecretName, this->apiSubaccountName});
+  this->ftx = "FTXUS";
+} virtual ~ExecutionManagementServiceFtxUs() {
+}
+};  // namespace ccapi
 } /* namespace ccapi */
 #endif
 #endif

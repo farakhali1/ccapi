@@ -6,9 +6,15 @@
 namespace ccapi {
 class ExecutionManagementServiceGateioPerpetualFutures : public ExecutionManagementServiceGateioBase {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   ExecutionManagementServiceGateioPerpetualFutures(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions,
                                                    SessionConfigs sessionConfigs, ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
       : ExecutionManagementServiceGateioBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io), _io(io) {
+#else
+  ExecutionManagementServiceGateioPerpetualFutures(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions,
+                                                   SessionConfigs sessionConfigs, ServiceContextPtr serviceContextPtr)
+      : ExecutionManagementServiceGateioBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
     this->exchangeName = CCAPI_EXCHANGE_NAME_GATEIO_PERPETUAL_FUTURES;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/v4/ws/";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
@@ -132,7 +138,9 @@ class ExecutionManagementServiceGateioPerpetualFutures : public ExecutionManagem
     }
     CCAPI_LOGGER_FUNCTION_EXIT;
   }
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   emumba::connector::io_handler& _io;
+#endif
   uint _ws_id = 0;
 };
 } /* namespace ccapi */

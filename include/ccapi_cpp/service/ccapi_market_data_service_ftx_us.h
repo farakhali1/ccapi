@@ -6,19 +6,25 @@
 namespace ccapi {
 class MarketDataServiceFtxUs : public MarketDataServiceFtxBase {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   MarketDataServiceFtxUs(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                          ServiceContext* serviceContextPtr, emumba::connector::io_handler& io)
-      : MarketDataServiceFtxBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
-    this->exchangeName = CCAPI_EXCHANGE_NAME_FTX_US;
-    this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/ws";
-    this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
-    this->setHostRestFromUrlRest(this->baseUrlRest);
-    this->setHostWsFromUrlWs(this->baseUrlWs);
-    try {
-      this->tcpResolverResultsRest = this->resolver.resolve(this->hostRest, this->portRest);
-    } catch (const std::exception& e) {
-      CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
-    }
+      : MarketDataServiceFtxBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io){
+#else
+  MarketDataServiceFtxUs(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                         std::shared_ptr<ServiceContext> serviceContextPtr)
+      : MarketDataServiceFtxBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
+            this->exchangeName = CCAPI_EXCHANGE_NAME_FTX_US;
+  this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/ws";
+  this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
+  this->setHostRestFromUrlRest(this->baseUrlRest);
+  this->setHostWsFromUrlWs(this->baseUrlWs);
+  try {
+    this->tcpResolverResultsRest = this->resolver.resolve(this->hostRest, this->portRest);
+  } catch (const std::exception& e) {
+    CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
+  }
 #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
 #else
     try {
@@ -27,9 +33,9 @@ class MarketDataServiceFtxUs : public MarketDataServiceFtxBase {
       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
     }
 #endif
-  }
-  virtual ~MarketDataServiceFtxUs() {}
-};
+} virtual ~MarketDataServiceFtxUs() {
+}
+};  // namespace ccapi
 } /* namespace ccapi */
 #endif
 #endif

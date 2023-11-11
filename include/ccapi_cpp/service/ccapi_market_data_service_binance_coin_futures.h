@@ -6,41 +6,47 @@
 namespace ccapi {
 class MarketDataServiceBinanceCoinFutures : public MarketDataServiceBinanceDerivativesBase {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   MarketDataServiceBinanceCoinFutures(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                       ServiceContext* serviceContextPtr, emumba::connector::io_handler& io)
-      : MarketDataServiceBinanceDerivativesBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
-    this->exchangeName = CCAPI_EXCHANGE_NAME_BINANCE_COIN_FUTURES;
-    this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/stream";
-    this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
-    this->setHostRestFromUrlRest(this->baseUrlRest);
-    this->setHostWsFromUrlWs(this->baseUrlWs);
-    //     try {
-    //       this->tcpResolverResultsRest = this->resolver.resolve(this->hostRest, this->portRest);
-    //     } catch (const std::exception& e) {
-    //       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
-    //     }
-    // #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
-    // #else
-    //     try {
-    //       this->tcpResolverResultsWs = this->resolverWs.resolve(this->hostWs, this->portWs);
-    //     } catch (const std::exception& e) {
-    //       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
-    //     }
-    // #endif
-    this->apiKeyName = CCAPI_BINANCE_COIN_FUTURES_API_KEY;
-    this->setupCredential({this->apiKeyName});
-    this->getRecentTradesTarget = "/dapi/v1/trades";
-    this->getHistoricalTradesTarget = "/dapi/v1/historicalTrades";
-    this->getRecentAggTradesTarget = "/dapi/v1/aggTrades";
-    this->getHistoricalAggTradesTarget = "/dapi/v1/aggTrades";
-    this->getRecentCandlesticksTarget = "/dapi/v1/klines";
-    this->getHistoricalCandlesticksTarget = "/dapi/v1/klines";
-    this->getMarketDepthTarget = "/dapi/v1/depth";
-    this->getInstrumentTarget = "/dapi/v1/exchangeInfo";
-    this->getInstrumentsTarget = "/dapi/v1/exchangeInfo";
-  }
-  virtual ~MarketDataServiceBinanceCoinFutures() {}
-};
+      : MarketDataServiceBinanceDerivativesBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io){
+#else
+  MarketDataServiceBinanceCoinFutures(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                                      std::shared_ptr<ServiceContext> serviceContextPtr)
+      : MarketDataServiceBinanceDerivativesBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
+            this->exchangeName = CCAPI_EXCHANGE_NAME_BINANCE_COIN_FUTURES;
+  this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/stream";
+  this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
+  this->setHostRestFromUrlRest(this->baseUrlRest);
+  this->setHostWsFromUrlWs(this->baseUrlWs);
+  //     try {
+  //       this->tcpResolverResultsRest = this->resolver.resolve(this->hostRest, this->portRest);
+  //     } catch (const std::exception& e) {
+  //       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
+  //     }
+  // #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
+  // #else
+  //     try {
+  //       this->tcpResolverResultsWs = this->resolverWs.resolve(this->hostWs, this->portWs);
+  //     } catch (const std::exception& e) {
+  //       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
+  //     }
+  // #endif
+  this->apiKeyName = CCAPI_BINANCE_COIN_FUTURES_API_KEY;
+  this->setupCredential({this->apiKeyName});
+  this->getRecentTradesTarget = "/dapi/v1/trades";
+  this->getHistoricalTradesTarget = "/dapi/v1/historicalTrades";
+  this->getRecentAggTradesTarget = "/dapi/v1/aggTrades";
+  this->getHistoricalAggTradesTarget = "/dapi/v1/aggTrades";
+  this->getRecentCandlesticksTarget = "/dapi/v1/klines";
+  this->getHistoricalCandlesticksTarget = "/dapi/v1/klines";
+  this->getMarketDepthTarget = "/dapi/v1/depth";
+  this->getInstrumentTarget = "/dapi/v1/exchangeInfo";
+  this->getInstrumentsTarget = "/dapi/v1/exchangeInfo";
+} virtual ~MarketDataServiceBinanceCoinFutures() {
+}
+};  // namespace ccapi
 } /* namespace ccapi */
 #endif
 #endif

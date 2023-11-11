@@ -70,7 +70,7 @@ class ServiceContext CCAPI_FINAL {
 } /* namespace ccapi */
 #else
 #include "ccapi_cpp/ccapi_logger.h"
-#ifdef ENABLE_EPOLL_HTTPS_CLIENT
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
 #include "io_handler.h"
 #endif
 namespace ccapi {
@@ -85,7 +85,7 @@ class ServiceContext CCAPI_FINAL {
   typedef ExecutorWorkGuard* ExecutorWorkGuardPtr;
   typedef boost::asio::ssl::context SslContext;
   typedef std::shared_ptr<SslContext> SslContextPtr;
-#ifdef ENABLE_EPOLL_HTTPS_CLIENT
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   ServiceContext(emumba::connector::io_handler& io) : _io(io) {
 #else
   ServiceContext() {
@@ -139,7 +139,7 @@ class ServiceContext CCAPI_FINAL {
     this->ioContextPtr->stop();
   }
   IoContextPtr ioContextPtr{new IoContext()};
-#ifdef ENABLE_EPOLL_HTTPS_CLIENT
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   emumba::connector::io_handler& _io;
 #endif
   ExecutorWorkGuardPtr executorWorkGuardPtr{new ExecutorWorkGuard(ioContextPtr->get_executor())};

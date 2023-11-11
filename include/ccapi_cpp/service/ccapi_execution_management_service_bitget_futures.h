@@ -6,9 +6,13 @@
 namespace ccapi {
 class ExecutionManagementServiceBitgetFutures : public ExecutionManagementServiceBitgetBase {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   ExecutionManagementServiceBitgetFutures(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                           ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
       : ExecutionManagementServiceBitgetBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+#else
+
+#endif
     this->exchangeName = CCAPI_EXCHANGE_NAME_BITGET_FUTURES;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/mix/v1/stream";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
@@ -314,9 +318,9 @@ class ExecutionManagementServiceBitgetFutures : public ExecutionManagementServic
   void onTextMessage(const WsConnection& wsConnection, const Subscription& subscription, const std::string& textMessage,
                      const TimePoint& timeReceived) override {
 #else
-  void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, const Subscription& subscription, boost::beast::string_view textMessageView,
-                     const TimePoint& timeReceived) override {
-    std::string textMessage(textMessageView);
+void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, const Subscription& subscription, boost::beast::string_view textMessageView,
+                   const TimePoint& timeReceived) override {
+  std::string textMessage(textMessageView);
 #endif
     if (textMessage != "pong") {
       rj::Document document;
@@ -353,7 +357,7 @@ class ExecutionManagementServiceBitgetFutures : public ExecutionManagementServic
 #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
         this->send(wsConnection.hdl, sendString, wspp::frame::opcode::text, ec);
 #else
-        this->send(wsConnectionPtr, sendString, ec);
+      this->send(wsConnectionPtr, sendString, ec);
 #endif
         if (ec) {
           this->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::SUBSCRIPTION_FAILURE, ec, "subscribe");
@@ -362,7 +366,7 @@ class ExecutionManagementServiceBitgetFutures : public ExecutionManagementServic
 #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
         Event event = this->createEvent(wsConnection, wsConnection.hdl, subscription, textMessage, document, eventStr, timeReceived);
 #else
-        Event event = this->createEvent(wsConnectionPtr, subscription, textMessageView, document, eventStr, timeReceived);
+      Event event = this->createEvent(wsConnectionPtr, subscription, textMessageView, document, eventStr, timeReceived);
 #endif
         if (!event.getMessageList().empty()) {
           this->eventHandler(event, nullptr);
@@ -374,9 +378,9 @@ class ExecutionManagementServiceBitgetFutures : public ExecutionManagementServic
   Event createEvent(const WsConnection& wsConnection, wspp::connection_hdl hdl, const Subscription& subscription, const std::string& textMessage,
                     const rj::Document& document, const std::string& eventStr, const TimePoint& timeReceived) {
 #else
-  Event createEvent(const std::shared_ptr<WsConnection> wsConnectionPtr, const Subscription& subscription, boost::beast::string_view textMessageView,
-                    const rj::Document& document, const std::string& eventStr, const TimePoint& timeReceived) {
-    std::string textMessage(textMessageView);
+Event createEvent(const std::shared_ptr<WsConnection> wsConnectionPtr, const Subscription& subscription, boost::beast::string_view textMessageView,
+                  const rj::Document& document, const std::string& eventStr, const TimePoint& timeReceived) {
+  std::string textMessage(textMessageView);
 #endif
     Event event;
     std::vector<Message> messageList;

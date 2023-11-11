@@ -6,10 +6,31 @@
 namespace ccapi {
 class ExecutionManagementServiceBinanceDerivativesBase : public ExecutionManagementServiceBinanceBase {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   ExecutionManagementServiceBinanceDerivativesBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions,
                                                    SessionConfigs sessionConfigs, ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
-      : ExecutionManagementServiceBinanceBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
-    this->isDerivatives = true;
+      : ExecutionManagementServiceBinanceBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io){
+#else
+  ExecutionManagementServiceBinanceDerivativesBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions,
+                                                   SessionConfigs sessionConfigs, ServiceContextPtr serviceContextPtr)
+      : ExecutionManagementServiceBinanceBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
+            this->isDerivatives = true;
+} virtual ~ExecutionManagementServiceBinanceDerivativesBase() {
+}
+void convertRequestForRest(http::request<http::string_body>& req, const Request& request, const TimePoint& now, const std::string& symbolId,
+                           const std::map<std::string, std::string>& credential) override {
+  switch (request.getOperation()) {
+    case Request::Operation::GET_ACCOUNT_POSITIONS: {
+      this->prepareReq(req, credential);
+      req.method(http::verb::get);
+      std::string queryString;
+      this->appendParam(queryString, {});
+      this->signRequest(queryString, {}, now, credential);
+      req.target(this->getAccountPositionsTarget + "?" + queryString);
+    } break;
+    default:
+      ExecutionManagementServiceBinanceBase::convertRequestForRest(req, request, now, symbolId, credential);
   }
   virtual ~ExecutionManagementServiceBinanceDerivativesBase() {}
   void convertRequestForRest(http::request<http::string_body>& req, const Request& request, const TimePoint& now, const std::string& symbolId,
@@ -49,12 +70,17 @@ class ExecutionManagementServiceBinanceDerivativesBase : public ExecutionManagem
           element.insert(CCAPI_LAST_UPDATED_TIME_SECONDS, UtilTime::convertMillisecondsStrToSecondsStr(x["updateTime"].GetString()));
           elementList.emplace_back(std::move(element));
         }
-      } break;
-      default:
-        ExecutionManagementServiceBinanceBase::extractAccountInfoFromRequest(elementList, request, operation, document);
-    }
+        element.insert(CCAPI_EM_POSITION_QUANTITY, positionAmt);
+        element.insert(CCAPI_EM_POSITION_ENTRY_PRICE, x["entryPrice"].GetString());
+        element.insert(CCAPI_EM_POSITION_LEVERAGE, x["leverage"].GetString());
+        elementList.emplace_back(std::move(element));
+      }
+    } break;
+    default:
+      ExecutionManagementServiceBinanceBase::extractAccountInfoFromRequest(elementList, request, operation, document);
   }
-};
+}
+};  // namespace ccapi
 } /* namespace ccapi */
 #endif
 #endif

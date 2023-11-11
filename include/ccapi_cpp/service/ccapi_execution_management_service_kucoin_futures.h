@@ -6,9 +6,15 @@
 namespace ccapi {
 class ExecutionManagementServiceKucoinFutures : public ExecutionManagementServiceKucoinBase {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   ExecutionManagementServiceKucoinFutures(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                           ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
       : ExecutionManagementServiceKucoinBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+#else
+  ExecutionManagementServiceKucoinFutures(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                                          ServiceContextPtr serviceContextPtr)
+      : ExecutionManagementServiceKucoinBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
     this->exchangeName = CCAPI_EXCHANGE_NAME_KUCOIN_FUTURES;
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
     this->setHostRestFromUrlRest(this->baseUrlRest);
@@ -40,39 +46,62 @@ class ExecutionManagementServiceKucoinFutures : public ExecutionManagementServic
     this->topicTradeOrders = "/contractMarket/tradeOrders";
     this->isDerivatives = true;
   }
-  virtual ~ExecutionManagementServiceKucoinFutures() {}
+  // #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
+  // #else
+  //     try {
+  //       this->tcpResolverResultsWs = this->resolverWs.resolve(this->hostWs, this->portWs);
+  //     } catch (const std::exception& e) {
+  //       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
+  //     }
+  // #endif
+  this->apiKeyName = CCAPI_KUCOIN_FUTURES_API_KEY;
+  this->apiSecretName = CCAPI_KUCOIN_FUTURES_API_SECRET;
+  this->apiPassphraseName = CCAPI_KUCOIN_FUTURES_API_PASSPHRASE;
+  this->setupCredential({this->apiKeyName, this->apiSecretName, this->apiPassphraseName});
+  this->createOrderTarget = "/api/v1/orders";
+  this->cancelOrderTarget = "/api/v1/orders/<id>";
+  this->getOrderTarget = "/api/v1/orders/<id>";
+  this->getOrderByClientOrderIdTarget = "/api/v1/orders/byClientOid?clientOid=<id>";
+  this->getOpenOrdersTarget = "/api/v1/orders";
+  this->cancelOpenOrdersTarget = "/api/v1/orders";
+  this->getAccountBalancesTarget = "/api/v1/account-overview";
+  this->getAccountPositionsTarget = "/api/v1/positions";
+  this->topicTradeOrders = "/contractMarket/tradeOrders";
+  this->isDerivatives = true;
+} virtual ~ExecutionManagementServiceKucoinFutures() {
+}
 #ifndef CCAPI_EXPOSE_INTERNAL
 
- protected:
+protected:
 #endif
-  void extractAccountInfoFromRequest(std::vector<Element>& elementList, const Request& request, const Request::Operation operation,
-                                     const rj::Document& document) override {
-    const auto& data = document["data"];
-    switch (request.getOperation()) {
-      case Request::Operation::GET_ACCOUNT_BALANCES: {
+void extractAccountInfoFromRequest(std::vector<Element>& elementList, const Request& request, const Request::Operation operation,
+                                   const rj::Document& document) override {
+  const auto& data = document["data"];
+  switch (request.getOperation()) {
+    case Request::Operation::GET_ACCOUNT_BALANCES: {
+      Element element;
+      element.insert(CCAPI_EM_ASSET, data["currency"].GetString());
+      element.insert(CCAPI_EM_QUANTITY_TOTAL, data["accountEquity"].GetString());
+      element.insert(CCAPI_EM_QUANTITY_AVAILABLE_FOR_TRADING, data["availableBalance"].GetString());
+      elementList.emplace_back(std::move(element));
+    } break;
+    case Request::Operation::GET_ACCOUNT_POSITIONS: {
+      for (const auto& x : data.GetArray()) {
         Element element;
-        element.insert(CCAPI_EM_ASSET, data["currency"].GetString());
-        element.insert(CCAPI_EM_QUANTITY_TOTAL, data["accountEquity"].GetString());
-        element.insert(CCAPI_EM_QUANTITY_AVAILABLE_FOR_TRADING, data["availableBalance"].GetString());
+        element.insert(CCAPI_INSTRUMENT, x["symbol"].GetString());
+        element.insert(CCAPI_SETTLE_ASSET, x["settleCurrency"].GetString());
+        element.insert(CCAPI_EM_POSITION_QUANTITY, x["currentQty"].GetString());
+        element.insert(CCAPI_EM_POSITION_COST, x["posCost"].GetString());
+        element.insert(CCAPI_EM_POSITION_ENTRY_PRICE, x["avgEntryPrice"].GetString());
+        element.insert(CCAPI_EM_POSITION_LEVERAGE, x["realLeverage"].GetString());
         elementList.emplace_back(std::move(element));
-      } break;
-      case Request::Operation::GET_ACCOUNT_POSITIONS: {
-        for (const auto& x : data.GetArray()) {
-          Element element;
-          element.insert(CCAPI_INSTRUMENT, x["symbol"].GetString());
-          element.insert(CCAPI_SETTLE_ASSET, x["settleCurrency"].GetString());
-          element.insert(CCAPI_EM_POSITION_QUANTITY, x["currentQty"].GetString());
-          element.insert(CCAPI_EM_POSITION_COST, x["posCost"].GetString());
-          element.insert(CCAPI_EM_POSITION_ENTRY_PRICE, x["avgEntryPrice"].GetString());
-          element.insert(CCAPI_EM_POSITION_LEVERAGE, x["realLeverage"].GetString());
-          elementList.emplace_back(std::move(element));
-        }
-      } break;
-      default:
-        CCAPI_LOGGER_FATAL(CCAPI_UNSUPPORTED_VALUE);
-    }
+      }
+    } break;
+    default:
+      CCAPI_LOGGER_FATAL(CCAPI_UNSUPPORTED_VALUE);
   }
-};
+}
+};  // namespace ccapi
 } /* namespace ccapi */
 #endif
 #endif

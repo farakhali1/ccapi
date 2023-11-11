@@ -6,33 +6,39 @@
 namespace ccapi {
 class MarketDataServiceHuobiUsdtSwap : public MarketDataServiceHuobiDerivativesBase {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   MarketDataServiceHuobiUsdtSwap(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                  ServiceContext* serviceContextPtr, emumba::connector::io_handler& io)
-      : MarketDataServiceHuobiDerivativesBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
-    this->exchangeName = CCAPI_EXCHANGE_NAME_HUOBI_USDT_SWAP;
-    this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/linear-swap-ws";
-    this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
-    this->setHostRestFromUrlRest(this->baseUrlRest);
-    this->setHostWsFromUrlWs(this->baseUrlWs);
-    //     try {
-    //       this->tcpResolverResultsRest = this->resolver.resolve(this->hostRest, this->portRest);
-    //     } catch (const std::exception& e) {
-    //       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
-    //     }
-    // #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
-    // #else
-    //     try {
-    //       this->tcpResolverResultsWs = this->resolverWs.resolve(this->hostWs, this->portWs);
-    //     } catch (const std::exception& e) {
-    //       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
-    //     }
-    // #endif
-    this->getRecentTradesTarget = CCAPI_HUOBI_USDT_SWAP_GET_RECENT_TRADES_PATH;
-    this->getInstrumentTarget = "/linear-swap-api/v1/swap_contract_info";
-    this->getInstrumentsTarget = "/linear-swap-api/v1/swap_contract_info";
-  }
-  virtual ~MarketDataServiceHuobiUsdtSwap() {}
-};
+      : MarketDataServiceHuobiDerivativesBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io){
+#else
+  MarketDataServiceHuobiUsdtSwap(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                                 std::shared_ptr<ServiceContext> serviceContextPtr)
+      : MarketDataServiceHuobiDerivativesBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
+            this->exchangeName = CCAPI_EXCHANGE_NAME_HUOBI_USDT_SWAP;
+  this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/linear-swap-ws";
+  this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
+  this->setHostRestFromUrlRest(this->baseUrlRest);
+  this->setHostWsFromUrlWs(this->baseUrlWs);
+  //     try {
+  //       this->tcpResolverResultsRest = this->resolver.resolve(this->hostRest, this->portRest);
+  //     } catch (const std::exception& e) {
+  //       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
+  //     }
+  // #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
+  // #else
+  //     try {
+  //       this->tcpResolverResultsWs = this->resolverWs.resolve(this->hostWs, this->portWs);
+  //     } catch (const std::exception& e) {
+  //       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
+  //     }
+  // #endif
+  this->getRecentTradesTarget = CCAPI_HUOBI_USDT_SWAP_GET_RECENT_TRADES_PATH;
+  this->getInstrumentTarget = "/linear-swap-api/v1/swap_contract_info";
+  this->getInstrumentsTarget = "/linear-swap-api/v1/swap_contract_info";
+} virtual ~MarketDataServiceHuobiUsdtSwap() {
+}
+};  // namespace ccapi
 } /* namespace ccapi */
 #endif
 #endif

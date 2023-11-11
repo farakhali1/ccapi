@@ -7,9 +7,15 @@
 namespace ccapi {
 class ExecutionManagementServiceKraken : public ExecutionManagementService {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   ExecutionManagementServiceKraken(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                    ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
       : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+#else
+  ExecutionManagementServiceKraken(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                                   ServiceContextPtr serviceContextPtr)
+      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
     this->exchangeName = CCAPI_EXCHANGE_NAME_KRAKEN;
     this->baseUrlWs = CCAPI_KRAKEN_URL_WS_BASE_PRIVATE;
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
@@ -428,6 +434,40 @@ class ExecutionManagementServiceKraken : public ExecutionManagementService {
         },
         this->sessionOptions.httpRequestTimeoutMilliseconds);
   }
+  auto apiKey = mapGetWithDefault(credential, this->apiKeyName);
+  req.set("API-Key", apiKey);
+  req.set(beast::http::field::content_type, "application/x-www-form-urlencoded; charset=utf-8");
+  std::string body;
+  std::string nonce = std::to_string(this->generateNonce(now));
+  this->appendParam(body, {}, nonce);
+  body.pop_back();
+  this->signRequest(req, body, credential, nonce);
+  this->sendRequest(
+      req, [wsConnectionPtr, that = shared_from_base<ExecutionManagementServiceKraken>()](const beast::error_code& ec) { that->onFail_(wsConnectionPtr); },
+      [wsConnectionPtr, that = shared_from_base<ExecutionManagementServiceKraken>()](const http::response<http::string_body>& res) {
+        int statusCode = res.result_int();
+        std::string body = res.body();
+        if (statusCode / 100 == 2) {
+          try {
+            rj::Document document;
+            document.Parse<rj::kParseNumbersAsStringsFlag>(body.c_str());
+            if (document.HasMember("result") && document["result"].HasMember("token")) {
+              std::string token = document["result"]["token"].GetString();
+              wsConnectionPtr->setUrl(that->baseUrlWs);
+              that->connect(wsConnectionPtr);
+              that->extraPropertyByConnectionIdMap[wsConnectionPtr->id].insert({
+                  {"token", token},
+              });
+            }
+            return;
+          } catch (const std::runtime_error& e) {
+            CCAPI_LOGGER_ERROR(std::string("e.what() = ") + e.what());
+          }
+        }
+        that->onFail_(wsConnectionPtr);
+      },
+      this->sessionOptions.httpRequestTimeoutMilliSeconds);
+}
 #endif
   std::vector<std::string> createSendStringListFromSubscription(const WsConnection& wsConnection, const Subscription& subscription, const TimePoint& now,
                                                                 const std::map<std::string, std::string>& credential) override {

@@ -6,41 +6,47 @@
 namespace ccapi {
 class MarketDataServiceBinanceUs : public MarketDataServiceBinanceBase {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   MarketDataServiceBinanceUs(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                              ServiceContext* serviceContextPtr, emumba::connector::io_handler& io)
-      : MarketDataServiceBinanceBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
-    this->exchangeName = CCAPI_EXCHANGE_NAME_BINANCE_US;
-    this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/stream";
-    this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
-    this->setHostRestFromUrlRest(this->baseUrlRest);
-    this->setHostWsFromUrlWs(this->baseUrlWs);
-    //     try {
-    //       this->tcpResolverResultsRest = this->resolver.resolve(this->hostRest, this->portRest);
-    //     } catch (const std::exception& e) {
-    //       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
-    //     }
-    // #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
-    // #else
-    //     try {
-    //       this->tcpResolverResultsWs = this->resolverWs.resolve(this->hostWs, this->portWs);
-    //     } catch (const std::exception& e) {
-    //       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
-    //     }
-    // #endif
-    this->apiKeyName = CCAPI_BINANCE_US_API_KEY;
-    this->setupCredential({this->apiKeyName});
-    this->getRecentTradesTarget = "/api/v3/trades";
-    this->getHistoricalTradesTarget = "/api/v3/historicalTrades";
-    this->getRecentAggTradesTarget = "/api/v3/aggTrades";
-    this->getHistoricalAggTradesTarget = "/api/v3/aggTrades";
-    this->getRecentCandlesticksTarget = "/api/v3/klines";
-    this->getHistoricalCandlesticksTarget = "/api/v3/klines";
-    this->getMarketDepthTarget = "/api/v3/depth";
-    this->getInstrumentTarget = "/api/v3/exchangeInfo";
-    this->getInstrumentsTarget = "/api/v3/exchangeInfo";
-  }
-  virtual ~MarketDataServiceBinanceUs() {}
-};
+      : MarketDataServiceBinanceBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io){
+#else
+  MarketDataServiceBinanceUs(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                             std::shared_ptr<ServiceContext> serviceContextPtr)
+      : MarketDataServiceBinanceBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
+            this->exchangeName = CCAPI_EXCHANGE_NAME_BINANCE_US;
+  this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/stream";
+  this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
+  this->setHostRestFromUrlRest(this->baseUrlRest);
+  this->setHostWsFromUrlWs(this->baseUrlWs);
+  //     try {
+  //       this->tcpResolverResultsRest = this->resolver.resolve(this->hostRest, this->portRest);
+  //     } catch (const std::exception& e) {
+  //       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
+  //     }
+  // #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
+  // #else
+  //     try {
+  //       this->tcpResolverResultsWs = this->resolverWs.resolve(this->hostWs, this->portWs);
+  //     } catch (const std::exception& e) {
+  //       CCAPI_LOGGER_FATAL(std::string("e.what() = ") + e.what());
+  //     }
+  // #endif
+  this->apiKeyName = CCAPI_BINANCE_US_API_KEY;
+  this->setupCredential({this->apiKeyName});
+  this->getRecentTradesTarget = "/api/v3/trades";
+  this->getHistoricalTradesTarget = "/api/v3/historicalTrades";
+  this->getRecentAggTradesTarget = "/api/v3/aggTrades";
+  this->getHistoricalAggTradesTarget = "/api/v3/aggTrades";
+  this->getRecentCandlesticksTarget = "/api/v3/klines";
+  this->getHistoricalCandlesticksTarget = "/api/v3/klines";
+  this->getMarketDepthTarget = "/api/v3/depth";
+  this->getInstrumentTarget = "/api/v3/exchangeInfo";
+  this->getInstrumentsTarget = "/api/v3/exchangeInfo";
+} virtual ~MarketDataServiceBinanceUs() {
+}
+};  // namespace ccapi
 } /* namespace ccapi */
 #endif
 #endif

@@ -6,9 +6,15 @@
 namespace ccapi {
 class MarketDataServiceHuobiDerivativesBase : public MarketDataServiceHuobiBase {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   MarketDataServiceHuobiDerivativesBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
                                         ServiceContext* serviceContextPtr, emumba::connector::io_handler& io)
       : MarketDataServiceHuobiBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+#else
+  MarketDataServiceHuobiDerivativesBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
+                                        std::shared_ptr<ServiceContext> serviceContextPtr)
+      : MarketDataServiceHuobiBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
     this->isDerivatives = true;
   }
   virtual ~MarketDataServiceHuobiDerivativesBase() {}
@@ -26,74 +32,77 @@ class MarketDataServiceHuobiDerivativesBase : public MarketDataServiceHuobiBase 
       } else {
         channelId = CCAPI_WEBSOCKET_HUOBI_CHANNEL_MARKET_DEPTH;
       }
+    } else {
+      channelId = CCAPI_WEBSOCKET_HUOBI_CHANNEL_MARKET_DEPTH;
     }
   }
-  bool doesHttpBodyContainError(const std::string& body) override { return body.find("err_code") != std::string::npos; }
-  void convertRequestForRest(http::request<http::string_body>& req, const Request& request, const TimePoint& now, const std::string& symbolId,
-                             const std::map<std::string, std::string>& credential) override {
-    switch (request.getOperation()) {
-      case Request::Operation::GET_INSTRUMENT: {
-        req.method(http::verb::get);
-        auto target = this->getInstrumentTarget;
-        std::string queryString;
-        this->appendSymbolId(queryString, symbolId, "contract_code");
-        req.target(target + "?" + queryString);
-      } break;
-      case Request::Operation::GET_INSTRUMENTS: {
-        req.method(http::verb::get);
-        auto target = this->getInstrumentTarget;
-        req.target(target);
-      } break;
-      default:
-        MarketDataServiceHuobiBase::convertRequestForRest(req, request, now, symbolId, credential);
-    }
+}
+bool doesHttpBodyContainError(const std::string& body) override { return body.find("err_code") != std::string::npos; }
+void convertRequestForRest(http::request<http::string_body>& req, const Request& request, const TimePoint& now, const std::string& symbolId,
+                           const std::map<std::string, std::string>& credential) override {
+  switch (request.getOperation()) {
+    case Request::Operation::GET_INSTRUMENT: {
+      req.method(http::verb::get);
+      auto target = this->getInstrumentTarget;
+      std::string queryString;
+      this->appendSymbolId(queryString, symbolId, "contract_code");
+      req.target(target + "?" + queryString);
+    } break;
+    case Request::Operation::GET_INSTRUMENTS: {
+      req.method(http::verb::get);
+      auto target = this->getInstrumentTarget;
+      req.target(target);
+    } break;
+    default:
+      MarketDataServiceHuobiBase::convertRequestForRest(req, request, now, symbolId, credential);
   }
-  void extractInstrumentInfo(Element& element, const rj::Value& x) {
-    element.insert(CCAPI_INSTRUMENT, x["symbol"].GetString());
-    element.insert(CCAPI_ORDER_PRICE_INCREMENT, UtilString::normalizeDecimalString(x["price_tick"].GetString()));
-    element.insert(CCAPI_CONTRACT_SIZE, UtilString::normalizeDecimalString(x["contract_size"].GetString()));
-  }
-  void convertTextMessageToMarketDataMessage(const Request& request, const std::string& textMessage, const TimePoint& timeReceived, Event& event,
-                                             std::vector<MarketDataMessage>& marketDataMessageList) override {
-    switch (request.getOperation()) {
-      case Request::Operation::GET_INSTRUMENT: {
-        rj::Document document;
-        document.Parse<rj::kParseNumbersAsStringsFlag>(textMessage.c_str());
-        Message message;
-        message.setTimeReceived(timeReceived);
-        message.setType(this->requestOperationToMessageTypeMap.at(request.getOperation()));
-        for (const auto& x : document["data"].GetArray()) {
-          if (std::string(x["contract_code"].GetString()) == request.getInstrument()) {
-            Element element;
-            this->extractInstrumentInfo(element, x);
-            message.setElementList({element});
-            break;
-          }
-        }
-        message.setCorrelationIdList({request.getCorrelationId()});
-        event.addMessages({message});
-      } break;
-      case Request::Operation::GET_INSTRUMENTS: {
-        rj::Document document;
-        document.Parse<rj::kParseNumbersAsStringsFlag>(textMessage.c_str());
-        Message message;
-        message.setTimeReceived(timeReceived);
-        message.setType(this->requestOperationToMessageTypeMap.at(request.getOperation()));
-        std::vector<Element> elementList;
-        for (const auto& x : document["data"].GetArray()) {
+}
+void extractInstrumentInfo(Element& element, const rj::Value& x) {
+  element.insert(CCAPI_INSTRUMENT, x["symbol"].GetString());
+  element.insert(CCAPI_ORDER_PRICE_INCREMENT, UtilString::normalizeDecimalString(x["price_tick"].GetString()));
+  element.insert(CCAPI_CONTRACT_SIZE, UtilString::normalizeDecimalString(x["contract_size"].GetString()));
+}
+void convertTextMessageToMarketDataMessage(const Request& request, const std::string& textMessage, const TimePoint& timeReceived, Event& event,
+                                           std::vector<MarketDataMessage>& marketDataMessageList) override {
+  switch (request.getOperation()) {
+    case Request::Operation::GET_INSTRUMENT: {
+      rj::Document document;
+      document.Parse<rj::kParseNumbersAsStringsFlag>(textMessage.c_str());
+      Message message;
+      message.setTimeReceived(timeReceived);
+      message.setType(this->requestOperationToMessageTypeMap.at(request.getOperation()));
+      for (const auto& x : document["data"].GetArray()) {
+        if (std::string(x["contract_code"].GetString()) == request.getInstrument()) {
           Element element;
           this->extractInstrumentInfo(element, x);
-          elementList.push_back(element);
+          message.setElementList({element});
+          break;
         }
-        message.setElementList(elementList);
-        message.setCorrelationIdList({request.getCorrelationId()});
-        event.addMessages({message});
-      } break;
-      default:
-        MarketDataServiceHuobiBase::convertTextMessageToMarketDataMessage(request, textMessage, timeReceived, event, marketDataMessageList);
-    }
+      }
+      message.setCorrelationIdList({request.getCorrelationId()});
+      event.addMessages({message});
+    } break;
+    case Request::Operation::GET_INSTRUMENTS: {
+      rj::Document document;
+      document.Parse<rj::kParseNumbersAsStringsFlag>(textMessage.c_str());
+      Message message;
+      message.setTimeReceived(timeReceived);
+      message.setType(this->requestOperationToMessageTypeMap.at(request.getOperation()));
+      std::vector<Element> elementList;
+      for (const auto& x : document["data"].GetArray()) {
+        Element element;
+        this->extractInstrumentInfo(element, x);
+        elementList.push_back(element);
+      }
+      message.setElementList(elementList);
+      message.setCorrelationIdList({request.getCorrelationId()});
+      event.addMessages({message});
+    } break;
+    default:
+      MarketDataServiceHuobiBase::convertTextMessageToMarketDataMessage(request, textMessage, timeReceived, event, marketDataMessageList);
   }
-};
+}
+};  // namespace ccapi
 } /* namespace ccapi */
 #endif
 #endif

@@ -6,9 +6,15 @@
 namespace ccapi {
 class ExecutionManagementServiceBybitDerivatives : public ExecutionManagementServiceBybitBase {
  public:
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   ExecutionManagementServiceBybitDerivatives(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions,
                                              SessionConfigs sessionConfigs, ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
       : ExecutionManagementServiceBybitBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+#else
+  ExecutionManagementServiceBybitDerivatives(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions,
+                                             SessionConfigs sessionConfigs, ServiceContextPtr serviceContextPtr)
+      : ExecutionManagementServiceBybitBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
+#endif
     this->exchangeName = CCAPI_EXCHANGE_NAME_BYBIT_DERIVATIVES;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/unified/private/v3";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
