@@ -7,8 +7,8 @@ namespace ccapi {
 class ExecutionManagementServiceBybit : public ExecutionManagementServiceBybitBase {
  public:
   ExecutionManagementServiceBybit(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                                  ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
-      : ExecutionManagementServiceBybitBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+                                  ServiceContextPtr serviceContextPtr)
+      : ExecutionManagementServiceBybitBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_BYBIT;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/spot/private/v3";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);

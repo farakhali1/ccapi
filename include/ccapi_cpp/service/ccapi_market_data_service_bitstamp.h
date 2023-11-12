@@ -7,8 +7,8 @@ namespace ccapi {
 class MarketDataServiceBitstamp : public MarketDataService {
  public:
   MarketDataServiceBitstamp(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                            std::shared_ptr<ServiceContext> serviceContextPtr, emumba::connector::io_handler& io)
-      : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+                            std::shared_ptr<ServiceContext> serviceContextPtr)
+      : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_BITSTAMP;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName);
     this->enableCheckPingPongWebsocketApplicationLevel = false;

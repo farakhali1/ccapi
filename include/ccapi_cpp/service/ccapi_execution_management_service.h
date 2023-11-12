@@ -28,8 +28,8 @@ class ExecutionManagementService : public Service {
     // DOUBLE, shouldn't be needed because double in a json response needs to parsed as string to preserve its precision
   };
   ExecutionManagementService(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                             ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
-      : Service(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io), _io(io) {
+                             ServiceContextPtr serviceContextPtr)
+      : Service(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
     this->requestOperationToMessageTypeMap = {
         {Request::Operation::CREATE_ORDER, Message::Type::CREATE_ORDER},
         {Request::Operation::CANCEL_ORDER, Message::Type::CANCEL_ORDER},
@@ -68,7 +68,7 @@ class ExecutionManagementService : public Service {
                                   return;
                                 }
 #ifdef ENABLE_EPOLL_WS_CLIENT
-                                std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(that->baseUrlWs, "", {subscription}, credential, that->_io, ++(that->_ws_id)));
+                                std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(that->baseUrlWs, "", {subscription}, credential, *that->_io, ++(that->_ws_id)));
 #else
                                 std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(that->baseUrlWs, "", {subscription}, credential, streamPtr));
 #endif
@@ -447,7 +447,6 @@ class ExecutionManagementService : public Service {
       wsConnectionByCorrelationIdMap;  // TODO(cryptochassis): for consistency, to be renamed to wsConnectionPtrByCorrelationIdMap
 #endif
   std::map<std::string, int> wsRequestIdByConnectionIdMap;
-  emumba::connector::io_handler& _io;
   uint _ws_id = 0;
 };
 } /* namespace ccapi */

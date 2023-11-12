@@ -8,8 +8,8 @@ namespace ccapi {
 class MarketDataServiceBinanceBase : public MarketDataService {
  public:
   MarketDataServiceBinanceBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                               std::shared_ptr<ServiceContext> serviceContextPtr, emumba::connector::io_handler& io)
-      : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+                               std::shared_ptr<ServiceContext> serviceContextPtr)
+      : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
     this->enableCheckPingPongWebsocketApplicationLevel = false;
   }
   virtual ~MarketDataServiceBinanceBase() {}

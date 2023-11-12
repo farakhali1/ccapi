@@ -7,8 +7,8 @@ namespace ccapi {
 class ExecutionManagementServiceHuobiUsdtSwap : public ExecutionManagementServiceHuobiDerivativesBase {
  public:
   ExecutionManagementServiceHuobiUsdtSwap(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                                          ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
-      : ExecutionManagementServiceHuobiDerivativesBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+                                          ServiceContextPtr serviceContextPtr)
+      : ExecutionManagementServiceHuobiDerivativesBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_HUOBI_USDT_SWAP;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/linear-swap-notification";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);

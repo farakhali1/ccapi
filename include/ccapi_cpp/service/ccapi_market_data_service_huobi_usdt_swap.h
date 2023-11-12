@@ -7,8 +7,8 @@ namespace ccapi {
 class MarketDataServiceHuobiUsdtSwap : public MarketDataServiceHuobiDerivativesBase {
  public:
   MarketDataServiceHuobiUsdtSwap(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                                 std::shared_ptr<ServiceContext> serviceContextPtr, emumba::connector::io_handler& io)
-      : MarketDataServiceHuobiDerivativesBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+                                 std::shared_ptr<ServiceContext> serviceContextPtr)
+      : MarketDataServiceHuobiDerivativesBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_HUOBI_USDT_SWAP;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/linear-swap-ws";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);

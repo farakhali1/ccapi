@@ -119,13 +119,8 @@ class Service : public std::enable_shared_from_this<Service> {
     return output;
   }
   Service(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-          ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
-      :
-#ifdef ENABLE_EPOLL_WS_CLIENT
-        _io(io),
-        _ws_rate_limit_timer(io),
-        _http_rate_limit_timer(io),
-#endif
+          ServiceContextPtr serviceContextPtr)
+      : _io(nullptr),
         eventHandler(eventHandler),
         sessionOptions(sessionOptions),
         sessionConfigs(sessionConfigs),
@@ -133,14 +128,6 @@ class Service : public std::enable_shared_from_this<Service> {
         resolver(*serviceContextPtr->ioContextPtr),
         resolverWs(*serviceContextPtr->ioContextPtr),
         httpConnectionPool(sessionOptions.httpConnectionPoolMaxSize) {
-#ifdef ENABLE_EPOLL_WS_CLIENT
-    _ws_rate_limit_timer.set_cb(std::bind(&Service::onWsRateTimerExpiry, this));
-    _ws_rate_limit_timer.set_interval(wsRateLimitInterval);
-    _ws_rate_limit_timer.start();
-    _http_rate_limit_timer.set_cb(std::bind(&Service::onHttpRateTimerExpiry, this));
-    _http_rate_limit_timer.set_interval(httpRateLimitInterval);
-    _http_rate_limit_timer.start();
-#endif
     this->enableCheckPingPongWebsocketProtocolLevel = this->sessionOptions.enableCheckPingPongWebsocketProtocolLevel;
     this->enableCheckPingPongWebsocketApplicationLevel = this->sessionOptions.enableCheckPingPongWebsocketApplicationLevel;
     // this->pingIntervalMilliSecondsByMethodMap[PingPongMethod::WEBSOCKET_PROTOCOL_LEVEL] = sessionOptions.pingWebsocketProtocolLevelIntervalMilliSeconds;
@@ -200,6 +187,21 @@ class Service : public std::enable_shared_from_this<Service> {
     throw std::runtime_error(errorMessage);
   }
   virtual void subscribe(std::vector<Subscription>& subscriptionList) {}
+
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
+  void setIOHandlerAndTimer(emumba::connector::io_handler& io, std::shared_ptr<emumba::connector::epoll_timer> _ws_timer,
+                    std::shared_ptr<emumba::connector::epoll_timer> _http_timer) {
+    _io = &io;
+    _ws_rate_limit_timer = _ws_timer;
+    _http_rate_limit_timer = _http_timer;
+    _ws_rate_limit_timer->set_cb(std::bind(&Service::onWsRateTimerExpiry, this));
+    _ws_rate_limit_timer->set_interval(wsRateLimitInterval);
+    _ws_rate_limit_timer->start();
+    _http_rate_limit_timer->set_cb(std::bind(&Service::onHttpRateTimerExpiry, this));
+    _http_rate_limit_timer->set_interval(httpRateLimitInterval);
+    _http_rate_limit_timer->start();
+  }
+#endif
 
 #ifdef BINANCE_SPOT_ORDER_ENTRY_ON_WS
   void prepareNewOrderRequeestForWebsocket(Request& request) {
@@ -513,9 +515,9 @@ class Service : public std::enable_shared_from_this<Service> {
       httpBufferedRequests.erase(BufferedRequests);
       httpNumberOfRequests--;
     }
-    _http_rate_limit_timer.reset();
+    _http_rate_limit_timer->reset();
     if (__builtin_expect(isHttpTimerIntervalSet == false, false)) {
-      _http_rate_limit_timer.set_interval(httpRateLimitInterval);
+      _http_rate_limit_timer->set_interval(httpRateLimitInterval);
       isHttpTimerIntervalSet = true;
     }
   }
@@ -577,7 +579,7 @@ class Service : public std::enable_shared_from_this<Service> {
     std::map<std::string, std::string> credentials;
     std::string url_spot = "wss://ws-api.binance.com:443/ws-api/v3";
     _binance_spot_exchange_wsConnectionPtr =
-        std::make_shared<ccapi::WsConnection>(url_spot, "instrumentGroup" + _binance_spot_ws_id, subscriptionList, credentials, _io, ++_binance_spot_ws_id);
+        std::make_shared<ccapi::WsConnection>(url_spot, "instrumentGroup" + _binance_spot_ws_id, subscriptionList, credentials, *_io, ++_binance_spot_ws_id);
     _binance_spot_exchange_wsConnectionPtr->status = WsConnection::Status::CONNECTING;
     CCAPI_LOGGER_DEBUG("connection initialization on id " + _binance_spot_exchange_wsConnectionPtr->id);
     std::string url = _binance_spot_exchange_wsConnectionPtr->getUrl();
@@ -623,7 +625,7 @@ class Service : public std::enable_shared_from_this<Service> {
         std::vector<Subscription> subscriptionList;
         std::map<std::string, std::string> credentials;
         _binance_spot_dummy_wsConnectionPtr = std::make_shared<ccapi::WsConnection>(ws_env_var, "instrumentGroup" + _binance_spot_ws_id, subscriptionList,
-                                                                                    credentials, _io, ++_binance_spot_ws_id);
+                                                                                    credentials, *_io, ++_binance_spot_ws_id);
         _binance_spot_dummy_wsConnectionPtr->status = WsConnection::Status::CONNECTING;
         CCAPI_LOGGER_DEBUG("connection initialization on id " + _binance_spot_dummy_wsConnectionPtr->id);
         std::string url = _binance_spot_dummy_wsConnectionPtr->getUrl();
@@ -661,7 +663,7 @@ class Service : public std::enable_shared_from_this<Service> {
       _retry.numRetry += 1;
       if (_retry.numRetry <= this->sessionOptions.httpMaxNumRetry && _retry.numRedirect <= this->sessionOptions.httpMaxNumRedirect) {
         if (httpNumberOfRequests != 0) {
-          createNewHttpSession(_io, false);
+          createNewHttpSession(*_io, false);
           http::request<http::string_body> req;
           TimePoint then = UtilTime::now();
           req = this->convertRequest(_request, then);
@@ -1826,9 +1828,9 @@ class Service : public std::enable_shared_from_this<Service> {
       BufferedMessages = wsBufferedMessages.erase(BufferedMessages);
       wsNumberOfRequests--;
     }
-    _ws_rate_limit_timer.reset();
+    _ws_rate_limit_timer->reset();
     if (__builtin_expect(isWsTimerIntervalSet == false, false)) {
-      _ws_rate_limit_timer.set_interval(wsRateLimitInterval);
+      _ws_rate_limit_timer->set_interval(wsRateLimitInterval);
       isWsTimerIntervalSet = true;
     }
   }
@@ -2658,9 +2660,9 @@ class Service : public std::enable_shared_from_this<Service> {
   std::queue<std::shared_ptr<ccapi::Request>> wsRequestsQueueptr;
   const char* ws_env_var;
 #endif
-  emumba::connector::io_handler& _io;
-  emumba::connector::epoll_timer _ws_rate_limit_timer;
-  emumba::connector::epoll_timer _http_rate_limit_timer;
+  emumba::connector::io_handler* _io;
+  std::shared_ptr<emumba::connector::epoll_timer> _ws_rate_limit_timer;
+  std::shared_ptr<emumba::connector::epoll_timer> _http_rate_limit_timer;
   std::shared_ptr<emumba::connector::https::client> _https_session;
   std::shared_ptr<emumba::connector::https::client> _dummy_https_session;
   bool is_dummy_connection_established = false;

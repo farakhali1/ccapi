@@ -7,8 +7,8 @@ namespace ccapi {
 class ExecutionManagementServiceHuobi : public ExecutionManagementServiceHuobiBase {
  public:
   ExecutionManagementServiceHuobi(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                                  ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
-      : ExecutionManagementServiceHuobiBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+                                  ServiceContextPtr serviceContextPtr)
+      : ExecutionManagementServiceHuobiBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_HUOBI;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/ws/v2";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);

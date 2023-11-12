@@ -17,8 +17,8 @@ namespace ccapi {
 class MarketDataService : public Service {
  public:
   MarketDataService(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                    std::shared_ptr<ServiceContext> serviceContextPtr, emumba::connector::io_handler& io)
-      : Service(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io), _io(io) {
+                    std::shared_ptr<ServiceContext> serviceContextPtr)
+      : Service(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
     CCAPI_LOGGER_FUNCTION_ENTER;
     this->requestOperationToMessageTypeMap = {
         {Request::Operation::GET_RECENT_TRADES, Message::Type::GET_RECENT_TRADES},
@@ -144,10 +144,10 @@ class MarketDataService : public Service {
             }
 #ifdef ENABLE_EPOLL_WS_CLIENT
             std::shared_ptr<WsConnection> wsConnectionPtr(
-                new WsConnection(url, instrumentGroup, subscriptionListGivenInstrumentGroup, credential, that->_io, ++(that->_ws_id)));
+                new WsConnection(url, instrumentGroup, subscriptionListGivenInstrumentGroup, credential, *that->_io, ++(that->_ws_id)));
 #else
             std::shared_ptr<WsConnection> wsConnectionPtr(
-                new WsConnection(url, instrumentGroup, subscriptionListGivenInstrumentGroup, credential, streamPtr, that->_io, ++(that->_ws_id)));
+                new WsConnection(url, instrumentGroup, subscriptionListGivenInstrumentGroup, credential, streamPtr));
 #endif
             CCAPI_LOGGER_WARN("about to subscribe with new wsConnectionPtr " + toString(*wsConnectionPtr));
             that->prepareConnect(wsConnectionPtr);
@@ -2126,7 +2126,6 @@ class MarketDataService : public Service {
       marketDataMessageDataBufferByConnectionIdExchangeSubscriptionIdVersionIdMap;
   std::map<std::string, std::map<std::string, int64_t>> orderbookVersionIdByConnectionIdExchangeSubscriptionIdMap;
   std::map<std::string, std::map<std::string, TimerPtr>> fetchMarketDepthInitialSnapshotTimerByConnectionIdExchangeSubscriptionIdMap;
-  emumba::connector::io_handler& _io;
   uint _ws_id = 0;
 };
 } /* namespace ccapi */

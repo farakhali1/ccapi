@@ -7,8 +7,8 @@ namespace ccapi {
 class MarketDataServiceDeribit : public MarketDataService {
  public:
   MarketDataServiceDeribit(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                           std::shared_ptr<ServiceContext> serviceContextPtr, emumba::connector::io_handler& io)
-      : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+                           std::shared_ptr<ServiceContext> serviceContextPtr)
+      : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_DERIBIT;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName) + "/ws/api/v2";
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);

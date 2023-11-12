@@ -7,8 +7,8 @@ namespace ccapi {
 class MarketDataServiceHuobiBase : public MarketDataService {
  public:
   MarketDataServiceHuobiBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                             std::shared_ptr<ServiceContext> serviceContextPtr, emumba::connector::io_handler& io)
-      : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+                             std::shared_ptr<ServiceContext> serviceContextPtr)
+      : MarketDataService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
     this->needDecompressWebsocketMessage = true;
 #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
     ErrorCode ec = this->inflater.init(false, 31);

@@ -7,8 +7,8 @@ namespace ccapi {
 class ExecutionManagementServiceBinanceDerivativesBase : public ExecutionManagementServiceBinanceBase {
  public:
   ExecutionManagementServiceBinanceDerivativesBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions,
-                                                   SessionConfigs sessionConfigs, ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
-      : ExecutionManagementServiceBinanceBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {
+                                                   SessionConfigs sessionConfigs, ServiceContextPtr serviceContextPtr)
+      : ExecutionManagementServiceBinanceBase(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
     this->isDerivatives = true;
   }
   virtual ~ExecutionManagementServiceBinanceDerivativesBase() {}

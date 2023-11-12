@@ -7,8 +7,8 @@ namespace ccapi {
 class ExecutionManagementServiceHuobiBase : public ExecutionManagementService {
  public:
   ExecutionManagementServiceHuobiBase(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                                      ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
-      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io) {}
+                                      ServiceContextPtr serviceContextPtr)
+      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {}
   virtual ~ExecutionManagementServiceHuobiBase() {}
 #ifndef CCAPI_EXPOSE_INTERNAL
 

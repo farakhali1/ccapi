@@ -7,8 +7,8 @@ namespace ccapi {
 class ExecutionManagementServiceAscendex : public ExecutionManagementService {
  public:
   ExecutionManagementServiceAscendex(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
-                                     ServiceContextPtr serviceContextPtr, emumba::connector::io_handler& io)
-      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr, io), _io(io) {
+                                     ServiceContextPtr serviceContextPtr)
+      : ExecutionManagementService(eventHandler, sessionOptions, sessionConfigs, serviceContextPtr) {
     this->exchangeName = CCAPI_EXCHANGE_NAME_ASCENDEX;
     this->baseUrlWs = sessionConfigs.getUrlWebsocketBase().at(this->exchangeName);
     this->baseUrlRest = sessionConfigs.getUrlRestBase().at(this->exchangeName);
@@ -380,7 +380,7 @@ class ExecutionManagementServiceAscendex : public ExecutionManagementService {
                                   return;
                                 }
 #ifdef ENABLE_EPOLL_WS_CLIENT
-                                std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(that->baseUrlWs, "", {subscription}, credential,  that->_io, ++(that->_ws_id)));
+                                std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(that->baseUrlWs, "", {subscription}, credential,  *that->_io, ++(that->_ws_id)));
 #else
                                 std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(that->baseUrlWs, "", {subscription}, credential, streamPtr));
 #endif
@@ -560,7 +560,6 @@ class ExecutionManagementServiceAscendex : public ExecutionManagementService {
     return event;
   }
   std::string apiAccountGroupName;
-  emumba::connector::io_handler& _io;
   uint _ws_id = 0;
 };
 } /* namespace ccapi */
