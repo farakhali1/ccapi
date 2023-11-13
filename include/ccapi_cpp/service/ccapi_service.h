@@ -120,7 +120,10 @@ class Service : public std::enable_shared_from_this<Service> {
   }
   Service(std::function<void(Event&, Queue<Event>*)> eventHandler, SessionOptions sessionOptions, SessionConfigs sessionConfigs,
           ServiceContextPtr serviceContextPtr)
-      : _io(nullptr),
+      :
+#if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
+        _io(nullptr),
+#endif
         eventHandler(eventHandler),
         sessionOptions(sessionOptions),
         sessionConfigs(sessionConfigs),
@@ -190,7 +193,7 @@ class Service : public std::enable_shared_from_this<Service> {
 
 #if defined ENABLE_EPOLL_HTTPS_CLIENT || defined ENABLE_EPOLL_WS_CLIENT
   void setIOHandlerAndTimer(emumba::connector::io_handler& io, std::shared_ptr<emumba::connector::epoll_timer> _ws_timer,
-                    std::shared_ptr<emumba::connector::epoll_timer> _http_timer) {
+                            std::shared_ptr<emumba::connector::epoll_timer> _http_timer) {
     _io = &io;
     _ws_rate_limit_timer = _ws_timer;
     _http_rate_limit_timer = _http_timer;
