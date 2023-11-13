@@ -118,7 +118,11 @@ class ExecutionManagementServiceGateioPerpetualFutures : public ExecutionManagem
                                   that->onError(Event::Type::SUBSCRIPTION_STATUS, Message::Type::SUBSCRIPTION_FAILURE, ec, "create stream", {subscription.getCorrelationId()});
                                   return;
                                 }
+#ifdef ENABLE_EPOLL_WS_CLIENT
+                                std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(that->baseUrlWs + settle, "", {subscription}, credential, *that->_io, ++(that->_ws_id)));
+#else
                                 std::shared_ptr<WsConnection> wsConnectionPtr(new WsConnection(that->baseUrlWs + settle, "", {subscription}, credential, streamPtr));
+#endif
                                 CCAPI_LOGGER_WARN("about to subscribe with new wsConnectionPtr " + toString(*wsConnectionPtr));
                                 that->prepareConnect(wsConnectionPtr);
 #endif
@@ -128,6 +132,7 @@ class ExecutionManagementServiceGateioPerpetualFutures : public ExecutionManagem
     }
     CCAPI_LOGGER_FUNCTION_EXIT;
   }
+  uint _ws_id = 0;
 };
 } /* namespace ccapi */
 #endif

@@ -212,6 +212,12 @@ class Request CCAPI_FINAL {
       }
     }
   }
+  std::string getParamValue(const std::string& ParamName, const std::string valueDefault = "") const {
+    for (const auto& ParamNameByValueMap : paramList) {
+      auto it = ParamNameByValueMap.find(ParamName);
+      return it == ParamNameByValueMap.end() ? valueDefault : it->second;
+    }
+  }
 #ifndef CCAPI_EXPOSE_INTERNAL
 
  private:

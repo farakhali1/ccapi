@@ -53,6 +53,8 @@ class SessionOptions CCAPI_FINAL {
   long httpConnectionKeepAliveTimeoutSeconds{
       10};  // used to remove a http connection from the http connection pool if it has stayed idle for at least this amount of time
   bool enableOneHttpConnectionPerRequest{};  // create a new http connection for each request
+  bool createMarketDataSessionsOnly = false;
+  bool createExecutionDataSessionsOnly = false;
 #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
 #else
   long websocketConnectTimeoutMilliseconds{10000};

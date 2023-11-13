@@ -73,6 +73,32 @@ class ExecutionManagementServiceDeribit : public ExecutionManagementService {
     this->authorizationJsonrpcIdSetByConnectionIdMap.erase(wsConnection.id);
     ExecutionManagementService::onClose(hdl);
   }
+// Rakurai Changes
+#elif ENABLE_EPOLL_WS_CLIENT
+  void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override {
+    ExecutionManagementService::onOpen(wsConnectionPtr);
+    rj::Document document;
+    document.SetObject();
+    rj::Document::AllocatorType& allocator = document.GetAllocator();
+    auto now = UtilTime::now();
+    this->appendParam(document, allocator, std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count(), "public/set_heartbeat",
+                      {
+                          {"interval", "10"},
+                      });
+    rj::StringBuffer stringBuffer;
+    rj::Writer<rj::StringBuffer> writer(stringBuffer);
+    document.Accept(writer);
+    std::string msg = stringBuffer.GetString();
+    this->send(wsConnectionPtr, msg);
+    // if (ec) {
+    //   this->onError(Event::Type::REQUEST_STATUS, Message::Type::REQUEST_FAILURE, ec, "request");
+    // }
+  }
+  void onClose(std::shared_ptr<WsConnection> wsConnectionPtr, ErrorCode ec) override {
+    this->subscriptionJsonrpcIdSetByConnectionIdMap.erase(wsConnectionPtr->id);
+    this->authorizationJsonrpcIdSetByConnectionIdMap.erase(wsConnectionPtr->id);
+    ExecutionManagementService::onClose(wsConnectionPtr, ec);
+  }
 #else
   void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override {
     ExecutionManagementService::onOpen(wsConnectionPtr);

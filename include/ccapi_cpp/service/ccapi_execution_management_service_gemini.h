@@ -304,6 +304,38 @@ class ExecutionManagementServiceGemini : public ExecutionManagementService {
     wsConnection.headers.insert({"X-GEMINI-SIGNATURE", signature});
     this->connect(wsConnection);
   }
+  // Rakurai Changes
+#elif ENABLE_EPOLL_WS_CLIENT
+  void prepareConnect(std::shared_ptr<WsConnection> wsConnectionPtr) override {
+    auto now = UtilTime::now();
+    auto subscription = wsConnectionPtr->subscriptionList.at(0);
+    const auto& fieldSet = subscription.getFieldSet();
+    const auto& instrumentSet = subscription.getInstrumentSet();
+    auto credential = wsConnectionPtr->subscriptionList.at(0).getCredential();
+    if (credential.empty()) {
+      credential = this->credentialDefault;
+    }
+    auto apiKey = mapGetWithDefault(credential, this->apiKeyName);
+    wsConnectionPtr->appendUrlPart("?heartbeat=true");
+    if (fieldSet == std::set<std::string>({CCAPI_EM_PRIVATE_TRADE})) {
+      wsConnectionPtr->appendUrlPart("&eventTypeFilter=fill");
+    }
+    if (!instrumentSet.empty()) {
+      for (const auto& instrument : instrumentSet) {
+        wsConnectionPtr->appendUrlPart("&symbolFilter=" + instrument);
+      }
+    }
+    wsConnectionPtr->appendUrlPart("&apiSessionFilter=" + apiKey);
+    wsConnectionPtr->headers.insert({"X-GEMINI-APIKEY", apiKey});
+    int64_t nonce = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    std::string payload = R"({"request":"/v1/order/events","nonce":)" + std::to_string(nonce) + "}";
+    auto base64Payload = UtilAlgorithm::base64Encode(payload);
+    wsConnectionPtr->headers.insert({"X-GEMINI-PAYLOAD", base64Payload});
+    auto apiSecret = mapGetWithDefault(credential, this->apiSecretName);
+    auto signature = Hmac::hmac(Hmac::ShaVersion::SHA384, apiSecret, base64Payload, true);
+    wsConnectionPtr->headers.insert({"X-GEMINI-SIGNATURE", signature});
+    this->connect(wsConnectionPtr);
+  }
 #else
   void prepareConnect(std::shared_ptr<WsConnection> wsConnectionPtr) override {
     auto now = UtilTime::now();
