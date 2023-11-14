@@ -220,7 +220,7 @@ class ExecutionManagementServiceBinanceBase : public ExecutionManagementService 
           }
           that->onFail_(wsConnectionPtr);
         },
-        this->sessionOptions.httpRequestTimeoutMilliSeconds);
+        this->sessionOptions.httpRequestTimeoutMilliseconds);
   }
   void onOpen(std::shared_ptr<WsConnection> wsConnectionPtr) override {
     ExecutionManagementService::onOpen(wsConnectionPtr);
@@ -284,7 +284,7 @@ class ExecutionManagementServiceBinanceBase : public ExecutionManagementService 
           [wsConnectionPtr, that_2 = that->shared_from_base<ExecutionManagementServiceBinanceBase>()](const http::response<http::string_body>& res) {
             CCAPI_LOGGER_DEBUG("ping listen key success");
           },
-          that->sessionOptions.httpRequestTimeoutMilliSeconds);
+          that->sessionOptions.httpRequestTimeoutMilliseconds);
     });
     this->pingListenKeyTimerMapByConnectionIdMap[wsConnectionPtr->id] = timerPtr;
   }

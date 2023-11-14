@@ -107,7 +107,7 @@ class MarketDataServiceBinanceBase : public MarketDataService {
     }
     document.AddMember("params", params, allocator);
     document.AddMember("id", rj::Value(this->exchangeJsonPayloadIdByConnectionIdMap[wsConnection.id]).Move(), allocator);
-    this->exchangeSubscriptionIdListByExchangeJsonPayloadIdByConnectionIdMap[wsConnection.id][this->exchangeJsonPayloadIdByConnectionIdMap[wsConnection.id]] =
+    this->exchangeSubscriptionIdListByConnectionIdExchangeJsonPayloadIdMap[wsConnection.id][this->exchangeJsonPayloadIdByConnectionIdMap[wsConnection.id]] =
         exchangeSubscriptionIdList;
     this->exchangeJsonPayloadIdByConnectionIdMap[wsConnection.id] += 1;
     rj::StringBuffer stringBuffer;

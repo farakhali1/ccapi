@@ -76,7 +76,7 @@
 #include "ccapi_cpp/service/ccapi_service_context.h"
 namespace beast = boost::beast;
 namespace http = beast::http;
-namespace net = net;
+namespace net = boost::asio;
 namespace ssl = net::ssl;
 using tcp = net::ip::tcp;
 #ifdef CCAPI_LEGACY_USE_WEBSOCKETPP
@@ -839,6 +839,7 @@ class Service : public std::enable_shared_from_this<Service> {
     }
     CCAPI_LOGGER_FUNCTION_EXIT;
     return futurePtr;
+#endif
   }
   virtual void sendRequestByWebsocket(Request& request, const TimePoint& now) {}
   virtual void sendRequestByFix(Request& request, const TimePoint& now) {}
@@ -975,6 +976,7 @@ class Service : public std::enable_shared_from_this<Service> {
                                   beast::bind_front_handler(&Service::onResolve, shared_from_this(), httpConnectionPtr, newResolverPtr, req, errorHandler,
                                                             responseHandler, timeoutMilliseconds));
     // this->startConnect(httpConnectionPtr, req, errorHandler, responseHandler, timeoutMilliseconds, this->tcpResolverResultsRest);
+#endif
   }
   void sendRequest(const std::string& host, const std::string& port, const http::request<http::string_body>& req,
                    std::function<void(const beast::error_code&)> errorHandler, std::function<void(const http::response<http::string_body>&)> responseHandler,
@@ -2186,6 +2188,14 @@ class Service : public std::enable_shared_from_this<Service> {
     }
     // }
     CCAPI_LOGGER_FUNCTION_EXIT;
+  }
+  std::string convertParamTimeSecondsToTimeMilliseconds(const std::string& input) {
+    auto dotPosition = input.find('.');
+    if (dotPosition == std::string::npos) {
+      return std::to_string(std::stoll(input) * 1000);
+    } else {
+    }
+    return std::to_string(std::stoll(input.substr(0, dotPosition)) * 1000 + std::stoll(UtilString::rightPadTo(input.substr(dotPosition + 1, 3), 3, '0')));
   }
   virtual void onTextMessage(std::shared_ptr<WsConnection> wsConnectionPtr, boost::beast::string_view textMessage, const TimePoint& timeReceived) {}
 #else

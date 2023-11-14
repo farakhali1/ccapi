@@ -735,7 +735,7 @@ class MarketDataService : public Service {
   virtual void onClose(std::shared_ptr<WsConnection> wsConnectionPtr) override {
     CCAPI_LOGGER_FUNCTION_ENTER;
     WsConnection& wsConnection = *wsConnectionPtr;
-    this->exchangeSubscriptionIdListByExchangeJsonPayloadIdByConnectionIdMap.erase(wsConnection.id);
+    this->exchangeSubscriptionIdListByConnectionIdExchangeJsonPayloadIdMap.erase(wsConnection.id);
     this->exchangeJsonPayloadIdByConnectionIdMap.erase(wsConnection.id);
     this->instrumentGroupByWsConnectionIdMap.erase(wsConnection.id);
     this->correlationIdByConnectionIdMap.erase(wsConnection.id);
@@ -805,13 +805,14 @@ class MarketDataService : public Service {
       if (marketDataMessage.type == MarketDataMessage::Type::MARKET_DATA_EVENTS_MARKET_DEPTH ||
           marketDataMessage.type == MarketDataMessage::Type::MARKET_DATA_EVENTS_TRADE ||
           marketDataMessage.type == MarketDataMessage::Type::MARKET_DATA_EVENTS_AGG_TRADE) {
-        if (this->sessionOptions.warnLateEventMaxMilliSeconds > 0 &&
-            std::chrono::duration_cast<std::chrono::milliseconds>(timeReceived - marketDataMessage.tp).count() >
-                this->sessionOptions.warnLateEventMaxMilliSeconds &&
-            marketDataMessage.recapType == MarketDataMessage::RecapType::NONE) {
-          CCAPI_LOGGER_WARN("late websocket message: timeReceived = " + toString(timeReceived) + ", marketDataMessage.tp = " + toString(marketDataMessage.tp) +
-                            ", wsConnection = " + toString(wsConnection));
-        }
+        // if (this->sessionOptions.warnLateEventMaxMilliseconds > 0 &&
+        //     std::chrono::duration_cast<std::chrono::milliseconds>(timeReceived - marketDataMessage.tp).count() >
+        //         this->sessionOptions.warnLateEventMaxMilliseconds &&
+        //     marketDataMessage.recapType == MarketDataMessage::RecapType::NONE) {
+        //   CCAPI_LOGGER_WARN("late websocket message: timeReceived = " + toString(timeReceived) + ", marketDataMessage.tp = " + toString(marketDataMessage.tp)
+        //   +
+        //                     ", wsConnection = " + toString(wsConnection));
+        // }
 
         std::string& exchangeSubscriptionId = marketDataMessage.exchangeSubscriptionId;
         CCAPI_LOGGER_TRACE("this->channelIdSymbolIdByConnectionIdExchangeSubscriptionIdMap = " +
